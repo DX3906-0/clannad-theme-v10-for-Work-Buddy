@@ -247,6 +247,18 @@
     + '  border: 1px solid rgba(255,255,255,.55); border-radius: 16px;'
     + '  backdrop-filter: blur(6px) saturate(1.05); -webkit-backdrop-filter: blur(6px) saturate(1.05);'
     + '  box-shadow: 0 8px 22px -14px rgba(80,40,70,.22), inset 0 1px 0 rgba(255,255,255,.7); }'
+    // 设置弹窗内的表单输入框：应用原生纯白 (rgb 255,255,255) 与弹窗 56% 主题玻璃底反差生硬
+    // （9/12 用户反馈「接口地址/模型名称/输入输出的输入框都是白色的」）。
+    // 改为柔和半透白玻璃 + 主题色调和边框，保持深色文字可读性。
+    // ⚠️ 作用域必须限定 .settings-modal__panel 内——wb-input 是应用通用组件，
+    // 全局改会波及主对话输入框等其他页面（防回归：宁窄勿宽）。
+    + 'body.wbx-active .settings-modal__panel .wb-input,'
+    + 'body.wbx-active .settings-modal__panel .wb-input-wrapper {'
+    + '  background: rgba(255,255,255,.45) !important;'
+    + '  border-color: color-mix(in srgb, var(--wbx-accent, #d96a92) 16%, rgba(255,255,255,.65)) !important; }'
+    + 'body.wbx-active .settings-modal__panel .wb-input:focus-within,'
+    + 'body.wbx-active .settings-modal__panel .wb-input-wrapper:focus-within {'
+    + '  border-color: color-mix(in srgb, var(--wbx-accent, #d96a92) 45%, rgba(255,255,255,.5)) !important; }'
     // 顶部菜单栏：与顶栏同款轻量色（同一条带上浓度一致，消除「多重白框」的分界感）
     + 'body.wbx-active #workbuddy-menubar-container {'
     + '  background: color-mix(in srgb, var(--wbx-panel, rgba(255,255,255,.42)) 38%, transparent) !important;'
