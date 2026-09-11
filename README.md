@@ -95,6 +95,11 @@ assets/
   `closest()` 查不到祖先链下方的排除目标，需要 `querySelector()` 反查）。
 - **多引擎多 tick 竞态**：`tameFullscreenBlur` / `unfrostAll` 会 `removeProperty` 清掉 inline，
   所以蒙层清除（`clearShellVeil`）必须**每 tick 校验补回**，不能"只处理一次"。
+- **弹层容器必须保留 backdrop-filter**：`tameFullscreenBlur` 会给超视口 50% 的大容器剥 blur，
+  但 modal/overlay/dialog/drawer/popover 词根的**弹层**覆盖在内容之上，blur 就是可读性来源——
+  被剥后只剩 33% 磨砂底，底下文字穿透混叠（9/12「添加模型弹窗全透明」根因）。
+  tame 已对这类词根显式写回 `blur(14px)`（后写者赢，同时覆盖历史 inline none 残留）；
+  例外：`.user-menu-popover` 走专属 blur(20px) 逻辑。
 - **遮罩词根规则** `[class*="wrap"]` 会误伤内容容器（应用改类名即回归），
   由 `clearMaskOverreach()` 语义兜底：真遮罩 = fixed 或面积 ≥35% 视口。
 - **stylesheet `!important` 打不过 `@layer` 内 important**，也打不过每帧 inline 重写；
