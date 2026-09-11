@@ -1015,6 +1015,23 @@
       // 而两者 rect 均为全屏会被下面的大容器判定命中，removeProperty 会把壁纸层的透明底清掉，
       // 导致 z-index:-1 的壁纸/玻璃层被应用的白色画布整个盖死（9/7「壁纸消失」根因）
       if (el === document.body || el === document.documentElement) return;
+      // ⚠️ 弹层容器（modal/overlay/dialog/drawer/popover 词根）必须保留 backdrop-filter：
+      // 它们覆盖在普通内容之上，磨砂模糊就是可读性来源——被 tame 当"大容器"剥掉 blur 后，
+      // 只剩词根规则的 33% 透明底，底下文字直接穿透混叠（9/12「添加模型弹窗全透明」根因，
+      // 典型受害：settings-modal-overlay、models-settings-panel__editor-overlay）。
+      // 弹层是静态覆盖层、无滚动重绘，保留单层 blur 无掉帧风险（.user-menu-popover 同理已有先例）。
+      // 注意：历史版本曾写过 inline none!important，必须**显式写回 blur**（后写者赢），
+      // 仅"跳过不处理"清不掉残留。blur 参数与词根 CSS 规则保持一致。
+      try {
+        if (el.className && /(modal|overlay|dialog|drawer|popover)/.test(el.className.toString())) {
+          // .user-menu-popover 主题 CSS 专门写了 blur(20px)，交给下方原有显式排除逻辑，不在此覆盖
+          if (!(el.classList && el.classList.contains('user-menu-popover'))) {
+            el.style.setProperty('backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
+            el.style.setProperty('-webkit-backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
+          }
+          return;  // forEach 回调：return 即跳过后续大容器清 blur 流程
+        }
+      } catch (e) {}
       // ⚠️ 用户资料下拉浮层 .user-menu-popover 是 fixed + z-index:1100 + 高度 > 50% 视口，
       // 应用原生 inline 已经写了 `backdrop-filter: none !important`，tame 也按大容器规则会再
       // 覆写一遍 backdrop-filter: none !important —— 但主题 CSS 已经专门给它 blur(20px) 了，
