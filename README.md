@@ -29,6 +29,24 @@ WorkBuddy 客户端皮肤：**6 个 Clannad 角色主题**，每个含专属壁�
 > `~/.workbuddy/scripts/`（启动器）、`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`（自启）。
 > 修改时先改仓库内版本再同步过去，保持两边一致。
 
+## 壁纸与素材（assets/）
+
+主脚本为单文件设计（base64 内嵌、便于 CDP 直接注入），`assets/` 是从中提取出的独立素材，供浏览与单独取用：
+
+```
+assets/
+├── wallpapers/            # 6 张角色主题壁纸 + 默认壁纸（1536×942）
+│   ├── nagisa.jpg  kyou.jpg  ryou.jpg
+│   ├── tomoyo.jpg  fuko.jpg  sakura-petals.jpg
+│   └── default-wallpaper.png
+├── portraits/             # 6 张角色立绘（600×900 透明 PNG）
+│   └── nagisa.png  kyou.png  ryou.png  tomoyo.png  fuko.png  sakura-petals.png
+└── fx/
+    └── particle-orb.png   # 粒子光斑贴图（256×256）
+```
+
+> 改动主题时**不需要**动 `assets/`——运行时读的是 JS 内嵌版本；`assets/` 仅作为独立素材仓库。
+
 ## 关键架构（防回归备忘）
 
 - **玻璃层 `#wbx-glass`**：预模糊壁纸 JPEG + 42% 白纱，`syncGlass()` 每秒写几何。
