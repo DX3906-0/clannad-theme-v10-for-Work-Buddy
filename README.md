@@ -33,7 +33,7 @@ WorkBuddy 客户端皮肤：**6 个 Clannad 角色主题**，每个含专属壁�
 
 ### 前置条件
 
-- Windows + WorkBuddy 桌面客户端（Electron），且客户端**开启了远程调试**（CDP）。
+- Windows + WorkBuddy 桌面客户端（Electron），且客户端**开启了远程调试**（CDP，实在不会让ai帮你开）。
   皮肤通过 CDP（Chrome DevTools Protocol）注入，端口随机，由 `~/.workbuddy/app/session/DevToolsActivePort` 文件记录。
 - Python 3（仅标准库即可，无需第三方依赖）。
 
