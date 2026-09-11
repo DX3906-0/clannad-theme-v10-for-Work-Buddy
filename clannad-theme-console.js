@@ -735,13 +735,44 @@
       }
       // 误伤：小面积的内容容器 → 透明
       el.setAttribute('data-wbx-maskoff', '1');
-      if (el.style.getPropertyValue('background-color') === 'transparent') continue;   // 已清，省开销
+      // 已清校验必须同时覆盖 background-image：bottom-mask 的白雾来自 bg-image（白色渐变），
+      // 应用重写 background 简写会只抹掉部分槽位；只查 bg-color 会在 bg-image 丢失时早退不补，
+      // 白渐变裸奔（9/12「滚动时白雾一闪一闪」根因之一）
+      if (el.style.getPropertyValue('background-color') === 'transparent' &&
+          el.style.getPropertyValue('background-image') === 'none') continue;   // 已清，省开销
       el.style.setProperty('background', 'transparent', 'important');
       el.style.setProperty('background-color', 'transparent', 'important');
       el.style.setProperty('background-image', 'none', 'important');
       el.style.setProperty('backdrop-filter', 'none', 'important');
       el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
     }
+    installMaskGuard();
+  }
+  // 【防闪烁】应用在滚动渲染中会重写 .cr-message-list__bottom-mask 等元素的
+  // background 简写，CSSOM 简写赋值会把 clearMaskOverreach 写入的全部 longhand
+  // （透明底/去渐变）一起抹掉 → 白色渐隐 mask 在下一个 1s tick 前裸奔 ~1.5s，
+  // 滚动时表现就是「白色虚化一闪一闪」。此处用 MutationObserver 在同一帧内
+  // （微任务、渲染前）即时补写，肉眼无感；幂等检查防自触发风暴。
+  function installMaskGuard() {
+    if (window.__wbxMaskGuard) return;
+    if (typeof MutationObserver === 'undefined') return;
+    var guard = new MutationObserver(function (muts) {
+      for (var i = 0; i < muts.length; i++) {
+        var el = muts[i].target;
+        if (!el || !el.style || !el.getAttribute) continue;
+        if (el.getAttribute('data-wbx-maskoff') !== '1') continue;
+        if (el.style.getPropertyValue('background-color') === 'transparent' &&
+            el.style.getPropertyValue('background-image') === 'none') continue;
+        el.style.setProperty('background-color', 'transparent', 'important');
+        el.style.setProperty('background-image', 'none', 'important');
+        el.style.setProperty('backdrop-filter', 'none', 'important');
+        el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+      }
+    });
+    try {
+      guard.observe(document.body || document.documentElement, { attributes: true, attributeFilter: ['style'], subtree: true });
+    } catch (e) { return; }
+    window.__wbxMaskGuard = guard;
   }
   function syncGlass() {
     if (!isCurrentGen()) return;
