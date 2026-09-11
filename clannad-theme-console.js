@@ -693,6 +693,12 @@
   // ---------------------------------------------------------------
   // 【9/11 新增】clearMaskOverreach —— 遮罩词根规则的"越界"兜底
   //
+  // 弹窗本体统一浓度（模块级，须在所有引擎函数之前定义）：
+  // user-menu-popover 同款 56% 主题色玻璃。assertPanelColors 与 tameFullscreenBlur
+  // 的弹层分支都会命中 modal 本体（两处 inline important 谁后写谁赢），
+  // 必须共用此值，杜绝两引擎浓度竞态（9/12「弹窗有些地方纯白有些主题色」根因）。
+  var WBX_MODAL_GLASS = 'color-mix(in srgb, color-mix(in srgb, var(--wbx-accent, #d96a92) 26%, var(--wbx-panel, rgba(255,255,255,.58))) 56%, transparent)';
+  //
   // 背景：CSS 里有一条把"弹层遮罩"改成主题色磨砂的规则，靠
   //   :is([class*="mask"],[class*="wrap"],[class*="backdrop"],[class*="overlay"],[class*="holder"])
   // 来匹配。但 wrap / holder 是极常见的**容器命名后缀**（xxx-wrapper / xxx-holder），
@@ -979,6 +985,11 @@
     // 弹出浮层（modal/dialog/…本体）：后写覆盖兜底——应用打开弹窗时可能写 inline
     // transparent !important（同产物抽屉的坑），stylesheet 打不过 inline，
     // 同元素同属性槽后写者赢。selector 与 CSS 硬规则一致。
+    // 弹窗本体统一浓度：user-menu-popover 同款 56% 主题色玻璃（用户验证过的可读值）。
+    // ⚠️ assertPanelColors 与 tameFullscreenBlur 的弹层分支**都会**命中 modal 本体
+    // （如 settings-modal__panel 含 "modal"），两处 inline important 谁后写谁赢——
+    // 浓度不一致就会每 tick 来回跳变（9/12「弹窗有些地方纯白有些主题色」根因）。
+    // 值定义在模块级 WBX_MODAL_GLASS，两处共用。
     var OVERLAY_SEL = '[class*="modal"]:not([class*="mask"]):not([class*="wrap"]):not([class*="backdrop"])'
       + ':not([class*="overlay"]):not([class*="holder"]):not([class*="-body"]):not([class*="-content"])'
       + ':not([class*="-header"]):not([class*="-footer"]):not([class*="-title"]):not([class*="-item"])'
@@ -987,9 +998,9 @@
     document.querySelectorAll(OVERLAY_SEL).forEach(function (el) {
       // ⚠️ .user-menu-popover 已被上方单独处理，这里跳过避免双层叠加
       if (el.classList && el.classList.contains('user-menu-popover')) return;
-      el.style.setProperty('background', PANEL_GLASS, 'important');
-      el.style.setProperty('backdrop-filter', 'blur(18px) saturate(1.15)', 'important');
-      el.style.setProperty('-webkit-backdrop-filter', 'blur(18px) saturate(1.15)', 'important');
+      el.style.setProperty('background', WBX_MODAL_GLASS, 'important');
+      el.style.setProperty('backdrop-filter', 'blur(20px) saturate(1.15)', 'important');
+      el.style.setProperty('-webkit-backdrop-filter', 'blur(20px) saturate(1.15)', 'important');
     });
   }
   function unfrostAll() {
@@ -1026,8 +1037,26 @@
         if (el.className && /(modal|overlay|dialog|drawer|popover)/.test(el.className.toString())) {
           // .user-menu-popover 主题 CSS 专门写了 blur(20px)，交给下方原有显式排除逻辑，不在此覆盖
           if (!(el.classList && el.classList.contains('user-menu-popover'))) {
-            el.style.setProperty('backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
-            el.style.setProperty('-webkit-backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
+            var _cls = el.className.toString();
+            // 内容子元素词根排除：BEM 命名下 editor-overlay__title / __close 等也含 "overlay"，
+            // 误喂会造成弹窗内部嵌套色块（同 OVERLAY_SEL 的 :not 排除思路）
+            var _bad = /(title|header|footer|body|content|item|close|btn|button|icon|input|label|tip|arrow|wrapper|container|inner|section|row|col)/.test(_cls);
+            var _rr = el.getBoundingClientRect();
+            var _full = _rr.width * _rr.height > (window.innerWidth || 1) * (window.innerHeight || 1) * 0.9;
+            if (!_bad && !_full) {
+              // 非全屏弹窗本体（二级弹窗/对话框）：56% 主题色玻璃（WBX_MODAL_GLASS，
+              // 与 assertPanelColors 的 OVERLAY_SEL 分支同值——两引擎都写 inline，
+              // 浓度必须一致，否则每 tick 跳变）。词根 CSS 的 33% 对"覆盖在内容上的
+              // 弹窗"太透：底下文字穿透混叠、且与弹窗内白色表单控件色彩不统一。
+              el.style.setProperty('background', WBX_MODAL_GLASS, 'important');
+              el.style.setProperty('backdrop-filter', 'blur(20px) saturate(1.15)', 'important');
+              el.style.setProperty('-webkit-backdrop-filter', 'blur(20px) saturate(1.15)', 'important');
+              el.style.setProperty('box-shadow', '0 24px 60px -24px rgba(60,30,55,.45), inset 0 1px 0 rgba(255,255,255,.5)', 'important');
+            } else {
+              // 全屏遮罩层：保持词根 CSS 的 33% 轻磨砂浓度，只补 blur
+              el.style.setProperty('backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
+              el.style.setProperty('-webkit-backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
+            }
           }
           return;  // forEach 回调：return 即跳过后续大容器清 blur 流程
         }
