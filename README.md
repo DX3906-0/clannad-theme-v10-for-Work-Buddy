@@ -29,6 +29,46 @@ WorkBuddy 客户端皮肤：**6 个 Clannad 角色主题**，每个含专属壁�
 > `~/.workbuddy/scripts/`（启动器）、`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`（自启）。
 > 修改时先改仓库内版本再同步过去，保持两边一致。
 
+## 使用说明
+
+### 前置条件
+
+- Windows + WorkBuddy 桌面客户端（Electron），且客户端**开启了远程调试**（CDP）。
+  皮肤通过 CDP（Chrome DevTools Protocol）注入，端口随机，由 `~/.workbuddy/app/session/DevToolsActivePort` 文件记录。
+- Python 3（仅标准库即可，无需第三方依赖）。
+
+### 方式 A：自动注入（推荐）
+
+1. 确认 `runtime/` 三个脚本中的路径常量与你的环境一致
+   （`start-wb-with-skin.py` 顶部硬编码了 `ROOT`、`WB_EXE`、`PYTHON` 等，按需修改）。
+2. 把 `clannad-theme-console.js` 与脚本放到 `~/.workbuddy/skills/clannad-theme-v10/`
+   （或改常量指向你自己的目录），`wb-cdp.py` 需存在于 `~/.workbuddy/`。
+3. 二选一启动：
+   - **随 WorkBuddy 启动**：运行 `runtime/start-wb-with-skin.py`（可建快捷方式），它会拉起 WorkBuddy、等 CDP 就绪后注入，并守护扫描新开的 iframe 页（资料库/专家/自动化等懒创建页面也能覆盖）。
+   - **开机常驻自愈**：把 `runtime/ClannadSkin.vbs` 放进 `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`，watchdog 每 6s 轮询，皮肤丢失/WorkBuddy 重启都会自动重注。
+
+### 方式 B：手动注入（临时体验）
+
+WorkBuddy 启动后，读取端口文件第一行得到 CDP 端口，把 `clannad-theme-console.js` 全文作为表达式在主窗口执行即可：
+
+```python
+# 依赖 wb-cdp.py（仓库外的 ~/.workbuddy/ 下），或自行用 websocket 调 CDP
+import os, importlib.util
+os.environ['CDP_PORT'] = '<端口>'
+spec = importlib.util.spec_from_file_location('wb_cdp', '<路径>/wb-cdp.py')
+wb_cdp = importlib.util.module_from_spec(spec); spec.loader.exec_module(wb_cdp)
+ws, t = wb_cdp.connect('<主窗口targetId>')
+wb_cdp.evaluate(ws, open('clannad-theme-console.js', encoding='utf-8').read())
+```
+
+> 也可在 WorkBuddy 内用任何能执行 JS 的入口直接粘贴脚本全文运行。
+
+### 日常使用
+
+- 注入成功后**右上角有主题切换器**：6 个角色主题随时切换，也可一键还原为 WorkBuddy 原生主题；选择持久化在 `localStorage`（重启/重注入后保持）。
+- 还原后再想启用：重新注入脚本即可（watchdog 会自动清残留再注）。
+- 日志：watchdog 写 `~/.workbuddy/skin-watchdog.log`，启动器写 `~/.workbuddy/scripts/inject.log`。
+
 ## 壁纸与素材（assets/）
 
 主脚本为单文件设计（base64 内嵌、便于 CDP 直接注入），`assets/` 是从中提取出的独立素材，供浏览与单独取用：
