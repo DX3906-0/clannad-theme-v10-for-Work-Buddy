@@ -107,10 +107,59 @@ def load_wb_cdp(port):
     return wb_cdp
 
 
+def is_remote_page(url):
+    """真正的远程网页 iframe（资料库/专家/技能/连接器/自动化/更多，均来自 workbuddy.cn）。
+    内联文档（about:srcdoc / about:blank / blob: / data:）是智能体 widget（流程图/图表）的
+    内容容器，绝不能注入：铺上 #wbx-glass 壁纸后卡片内部会被壁纸盖住，用户看到的就是
+    「AI 输出的流程图被渲染成壁纸」（9/17 根因：此前把「所有 iframe」都当成远程网页）。"""
+    u = (url or '').strip().lower()
+    return u.startswith('http://') or u.startswith('https://')
+
+
+def purge_inline_iframe(wb_cdp, t, tag, url):
+    """内联 iframe：只清理，绝不注入。若历史注入残留（__WBX_EMBED__ / #wbx-glass /
+    body.wbx-active），就地跑一遍主题脚本的清理段把它还原——关掉嵌入标志后再执行，
+    脚本开头会移除自己写的 style/DOM 层，随后命中环境守卫直接退出。"""
+    title = (t.get('title') or '')[:30]
+    try:
+        ws, target = wb_cdp.connect(t['id'])
+    except Exception:
+        return 'skip'
+    try:
+        ws.call('Runtime.enable')
+        poisoned = wb_cdp.evaluate(ws, """
+(function(){
+    return !!(window.__WBX_EMBED__ || window.__WBX_INJECTED__ ||
+        document.getElementById('wbx-glass') ||
+        (document.body && document.body.classList.contains('wbx-active')));
+})()""")
+        if str(poisoned).strip().lower() not in ('true', '1'):
+            return 'skip'
+        with open(THEME_FILE, 'r', encoding='utf-8') as f:
+            code = f.read()
+        r = wb_cdp.evaluate(ws, '(function(){window.__WBX_EMBED__=false;window.__WBX_INJECTED__=undefined;'
+                                'try{\n' + code + '\n}catch(e){} return "purged";})()')
+        log(f'[inline-iframe][{title}] 误注入已清理: {r} url={url[:50]}')
+        return 'purged'
+    except Exception as e:
+        log(f'[inline-iframe][{title}] 清理异常: {e}')
+        return 'fail'
+    finally:
+        try:
+            ws.close()
+        except Exception:
+            pass
+
+
 def inject_target(wb_cdp, t, tag, theme_key='fuko', host_active=True):
     title = (t.get('title') or '')[:30]
     url = (t.get('url') or '')
-    embed = t.get('type') == 'iframe'
+    is_iframe = t.get('type') == 'iframe'
+    # ⚠️ 只有 http(s) 远程页才算「嵌入页」；about:srcdoc 等内联 iframe 是智能体 widget 的内容
+    # 容器，一律只清理不注入（9/17「流程图被渲染成壁纸」根因）。
+    if is_iframe and not is_remote_page(url):
+        return purge_inline_iframe(wb_cdp, t, tag, url)
+    embed = is_iframe
     try:
         ws, target = wb_cdp.connect(t['id'])
     except Exception as e:

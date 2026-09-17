@@ -102,6 +102,15 @@ assets/
   例外：`.user-menu-popover` 走专属 blur(20px) 逻辑。
 - **遮罩词根规则** `[class*="wrap"]` 会误伤内容容器（应用改类名即回归），
   由 `clearMaskOverreach()` 语义兜底：真遮罩 = fixed 或面积 ≥35% 视口。
+- **内联 iframe 绝不能注入主题**（「AI 输出的流程图被渲染成壁纸」根因，9/17）：
+  智能体 widget（流程图/图表）渲染在 `about:srcdoc` 沙箱 iframe 里。
+  注入后 `#wbx-glass` 会把壁纸铺进卡片内部，切页 / 等十余秒被守护重注后复发。
+  两道防线缺一不可：
+  1. 主题源码环境守卫 = **协议白名单**：iframe 内必须同时满足 `http(s)` **且** `__WBX_EMBED__`；
+     `about:srcdoc` / `about:blank` / `blob:` / `data:` 一律只清理不布置。
+  2. 注入脚本（`runtime/start-wb-with-skin.py`）判定 `is_remote_page(url)`，
+     仅 http(s) 才置位 `__WBX_EMBED__`；内联 iframe 走 `purge_inline_iframe()` 只清残留。
+     历史上曾把「所有 iframe」都当远程网页（日志里 113 次 `about:srcdoc` 注入即此 bug）。
 - **stylesheet `!important` 打不过 `@layer` 内 important**，也打不过每帧 inline 重写；
   稳定修改只能进主题源码（inline `!important`）。
 - 排除主题自身图层要用 `id` 前缀 `wbx-` 判断，**不能用** `closest('[class*="wbx"]')`（body 会全命中）。
