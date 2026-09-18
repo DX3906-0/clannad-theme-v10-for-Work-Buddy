@@ -835,7 +835,10 @@
     try {
       lift = Math.round(stack.getBoundingClientRect().top - area.getBoundingClientRect().top);
     } catch (e) { return; }
-    if (lift < 0) lift = 0;
+    // 夹紧 [0,120]：正常只有「后台任务条」会把输入栈推下去（48px，两行约 70px）。
+    // 路由切换等瞬时布局可能测出离谱值（实测见过 176px，会把排队条顶到天上），
+    // 宁可不动（=0，退回原生表现）也不要乱位移。
+    if (lift < 0 || lift > 120) lift = 0;
     if (lift === state.queueLift && ov.getAttribute('data-wbx-lift') === (lift > 0 ? '1' : null)) return;
     state.queueLift = lift;
     if (lift > 0) {
