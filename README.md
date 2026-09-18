@@ -111,6 +111,25 @@ assets/
   2. 注入脚本（`runtime/start-wb-with-skin.py`）判定 `is_remote_page(url)`，
      仅 http(s) 才置位 `__WBX_EMBED__`；内联 iframe 走 `purge_inline_iframe()` 只清残留。
      历史上曾把「所有 iframe」都当远程网页（日志里 113 次 `about:srcdoc` 注入即此 bug）。
+- **后台任务条会盖住排队消息条**（「引导会话」被压在底层、⧉✎🗑 点不动，9/18）：
+  这是**应用原生**行为（还原主题后实测同样被盖）。成因是层叠上下文的先天劣势：
+  「N 个后台任务运行中」条 `.conversation-input-area > div[class^="_wrapper_"]` 是
+  `__input-stack` 的兄弟、`z-index:15`；排队条却挂在 `__prompt-queue-overlay`
+  （`position:absolute; z-index:auto`）内部 —— 覆层自成一个层叠上下文，**排队条自身
+  的 z-index 抬多高都没用**（实测 16 无效）。修法是**避让**而非抬升：
+  任务条存在时把整条排队覆层上移一个任务条高度（`translateY(-48px)`），两条紧邻不重叠。
+  用 `transform` 而非 `top` —— 应用按排队条高度自己算 `top:-100px`，改 `top` 会打架。
+  位移量 = `input-stack.top - input-area.top`（有任务条 48 / 无则 0），因此**不需要识别
+  带 hash 的 `_wrapper_p87zk_1`**，构建改名也不失效；CSS 规则由 `[data-wbx-lift="1"]`
+  门控（JS 置位），属性缺失时规则不匹配 = 优雅退化回原生表现。
+- **成长伙伴（小宠物）压在排队条按钮上**（9/18）：`.conversation-input__growth-buddy`
+  外层虽是 `pointer-events:none`，但内部有个 ~70×70 的隐形热区（`pointer-events:auto`）
+  把命中测试抢走，正好盖住排队条的三个 icon-btn。修法：任务条 / 排队条出现时用
+  `:has()` 条件隐藏宠物（JS `tameGrowthBuddy()` 兜底）。
+- **`restore()` 必须清 tame 写过的 inline**：tame 给弹层容器写过 inline bg/blur，
+  不在 `[data-wbx-frost]` 体系里，`unfrostAll()` 清不到 → 还原后残留（实测
+  `__prompt-queue-overlay` 还原后仍带 `blur(14px)`）。tame 写入处打 `data-wbx-tamed="1"`，
+  `restore()` 按标记清 bg/blur/阴影，并一并清 `data-wbx-lift` / `--wbx-queue-lift`。
 - **stylesheet `!important` 打不过 `@layer` 内 important**，也打不过每帧 inline 重写；
   稳定修改只能进主题源码（inline `!important`）。
 - 排除主题自身图层要用 `id` 前缀 `wbx-` 判断，**不能用** `closest('[class*="wbx"]')`（body 会全命中）。

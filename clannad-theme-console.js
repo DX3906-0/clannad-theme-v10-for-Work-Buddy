@@ -365,6 +365,30 @@
     + '.cr-input-box {'
     + '  box-shadow: none !important;'
     + '  background: transparent !important; }'
+    // 【9/18】成长伙伴（小宠物）避让 —— 应用把 `.conversation-input__growth-buddy` 绝对定位在
+    // 输入区右上角（1128,613 起、120×120），其**外层**虽为 pointer-events:none，但内部还有一个
+    // ~70×70 的隐形热区（z-index:13 + pointer-events:auto），把命中测试重新打开了。
+    // 实测它正压在「排队消息条」右侧的三个 icon-btn（⧉ 复制 / ✎ 编辑 / 🗑 删除）上：
+    // elementFromPoint 在 ✎/🗑 上返回的是这个热区（covered:true），用户点不动；
+    // 视觉上也遮住输入框右上角。任务条 / 排队消息条出现时让它让位（9/18 用户选定方案）。
+    // 用 :has() 做纯 CSS 条件：DOM 一变浏览器立即重算，不需要 tick 补写，也不会误伤
+    // 无任务时的正常展示。底色/位置一律不动，只隐藏。
+    + 'body.wbx-active:has(.cb-message-queue) .conversation-input__growth-buddy,'
+    + 'body.wbx-active:has(.conversation-queue-panel) .conversation-input__growth-buddy {'
+    + '  display: none !important; }'
+    // 【9/18】后台任务条遮挡排队消息条 —— 应用原生问题（实测：还原主题后同样被盖）：
+    // 「N 个后台任务运行中」条 `.conversation-input-area > div[class^="_wrapper_"]` 是
+    // `.conversation-input-area__input-stack` 的**兄弟**、z-index:15；而排队消息条挂在
+    // `__prompt-queue-overlay`（position:absolute、z-index:auto）内部的 `.conversation-queue-panel`
+    // 里 —— 覆层 z-auto 形成一个层叠上下文，把排队条困住，靠它自己的 z-index 永远抬不上去，
+    // 于是任务条盖住了排队条右侧的 ⧉ 复制 / ✎ 编辑 / 🗑 删除（elementFromPoint 命中 _wrapper_*）。
+    // 任务条内没有任何按钮（btns=0），所以只需**避让**：任务条存在时把排队覆层整体上移
+    // 一个任务条高度（= input-stack.top - area.top，无任务条时为 0），两条紧邻不重叠，
+    // 四个元素各自可点。用 transform（不用 top）——应用会按排队条高度自行计算 top:-100px，
+    // 改 top 会跟它打架；transform 是叠加的，且覆层内部无 fixed 后代，安全。
+    // 属性门控 data-wbx-lift 由 JS 置位（不依赖 hash 类名 _wrapper_p87zk_1，构建改名也不失效）。
+    + 'body.wbx-active .conversation-input-area__prompt-queue-overlay[data-wbx-lift="1"] {'
+    + '  transform: translateY(calc(-1 * var(--wbx-queue-lift, 48px))) !important; }'
     // ⭐ 新建任务首页白卡片：`.wb-home-composer` SECTION（800×224）应用原生画了
     // `rgba(250, 244, 255, 0.72)` 半透白底，把 chip 行 + 对话框 + 工具栏 + footer items
     // （选择工作空间 / 默认权限）全部包在一张「白卡」里。在壁纸主题下看起来非常突兀——
@@ -546,7 +570,7 @@
   // 嵌入模式下只铺壁纸 + 磨砂玻璃 + 去白引擎，不建主题切换器、不做粒子动效（省性能）。
   var EMBED = !!window.__WBX_EMBED__;
 
-  var state = { style: null, ambient: null, fx: null, bar: null, mo: null };
+  var state = { style: null, ambient: null, fx: null, bar: null, mo: null, queueLift: -1 };
 
   function clearFx() { if (state.fx) { state.fx.remove(); state.fx = null; } }
 
@@ -773,6 +797,53 @@
       el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
     }
     installMaskGuard();
+  }
+  // 【9/18】成长伙伴（小宠物）避让 —— JS 兜底
+  // CSS 侧已用 `body.wbx-active:has(.cb-message-queue)` 做条件隐藏（零延迟、DOM 一变即重算），
+  // 这里放一份等价逻辑，防止 :has() 在个别环境不可用时失效。
+  // 只处理"我们隐藏过"的元素：用 data-wbx-pet-away 标记，绝不 removeProperty 应用自己写的 display。
+  function tameGrowthBuddy() {
+    var pet = document.querySelector('.conversation-input__growth-buddy');
+    if (!pet) return;
+    var open = document.querySelector('.cb-message-queue, .conversation-queue-panel');
+    if (open) {
+      if (pet.getAttribute('data-wbx-pet-away') === '1' &&
+          pet.style.getPropertyValue('display') === 'none') return;   // 已隐藏，省开销
+      pet.setAttribute('data-wbx-pet-away', '1');
+      pet.style.setProperty('display', 'none', 'important');
+    } else if (pet.getAttribute('data-wbx-pet-away') === '1') {
+      pet.removeAttribute('data-wbx-pet-away');
+      pet.style.removeProperty('display');
+    }
+  }
+  // 【9/18】排队消息条避让后台任务条 —— JS 侧测量（CSS 规则靠 data-wbx-lift 门控）
+  // 位移量 = input-stack.top - input-area.top：有后台任务条时 = 48，无时 = 0，
+  // 因此不需要识别任务条的（带 hash 的）类名，构建改名也不会失效。
+  // 只写 data-wbx-lift + --wbx-queue-lift 两个主题自有属性，绝不碰应用的 top/height。
+  function syncQueueLift() {
+    var area = document.querySelector('.conversation-input-area');
+    if (!area || !area.children || area.children.length < 2) return;
+    var ov = document.querySelector('.conversation-input-area__prompt-queue-overlay');
+    if (!ov) return;
+    var stack = null;
+    for (var i = 0; i < area.children.length; i++) {
+      var c = area.children[i];
+      if (c !== ov && !ov.contains(c) && /__input-stack/.test(String(c.className || ''))) { stack = c; break; }
+    }
+    if (!stack) return;
+    var lift = 0;
+    try {
+      lift = Math.round(stack.getBoundingClientRect().top - area.getBoundingClientRect().top);
+    } catch (e) { return; }
+    if (lift < 0) lift = 0;
+    if (lift === state.queueLift && ov.getAttribute('data-wbx-lift') === (lift > 0 ? '1' : null)) return;
+    state.queueLift = lift;
+    if (lift > 0) {
+      document.body.style.setProperty('--wbx-queue-lift', lift + 'px');
+      if (ov.getAttribute('data-wbx-lift') !== '1') ov.setAttribute('data-wbx-lift', '1');
+    } else {
+      ov.removeAttribute('data-wbx-lift');
+    }
   }
   // 【防闪烁】应用在滚动渲染中会重写 .cr-message-list__bottom-mask 等元素的
   // background 简写，CSSOM 简写赋值会把 clearMaskOverreach 写入的全部 longhand
@@ -1077,6 +1148,10 @@
               el.style.setProperty('backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
               el.style.setProperty('-webkit-backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
             }
+            // 打标记：restore() 需要知道自己往哪些元素写过 inline blur/bg——
+            // 否则「一键还原」后这些 inline 仍残留（9/18 实测：还原后
+            // .conversation-input-area__prompt-queue-overlay 仍带 blur(14px) inline）。
+            el.setAttribute('data-wbx-tamed', '1');
           }
           return;  // forEach 回调：return 即跳过后续大容器清 blur 流程
         }
@@ -1114,7 +1189,9 @@
   var frostTimer = null;
   function scheduleFrost() {
     if (frostTimer) clearTimeout(frostTimer);
-    frostTimer = setTimeout(frostWhites, 250);
+    // ⚠️ 测量放进去抖后的回调里：DOM 一变就 getBoundingClientRect 会在消息流式输出时
+    // 反复强制重排、拖垮帧率（同 tame 的注释）。250ms 去抖足够快，且任务条出现/消失不频繁。
+    frostTimer = setTimeout(function () { frostWhites(); syncQueueLift(); }, 250);
   }
 
   // 预模糊壁纸：canvas 一次性生成当前主题壁纸的模糊副本，由 #wbx-glass 以 fixed+cover+center 对齐全屏壁纸
@@ -1292,6 +1369,8 @@
     state.glassTimer = setInterval(function () {
       if (!isCurrentGen()) { clearInterval(state.glassTimer); return; }   // 旧实例自毁，避免与新实例抢写
       syncGlass();
+      tameGrowthBuddy();   // 宠物避让兜底（任务条/排队消息条出现时隐藏）
+      syncQueueLift();     // 排队条避让后台任务条（同上：兜底测量）
     }, 1000);
 
     state.mo = new MutationObserver(function () {
@@ -1309,6 +1388,8 @@
     });
     state.frostMo.observe(root, { childList: true, subtree: true });
     scheduleFrost();
+    tameGrowthBuddy();   // 注入即生效（不等 1s tick）
+    syncQueueLift();     // 注入即生效（不等 1s tick）
     state.frostTimer = setInterval(function () {
       if (!isCurrentGen()) { clearInterval(state.frostTimer); return; }
       frostWhites();
@@ -1332,6 +1413,19 @@
     document.body.classList.remove('wbx-active');
     document.documentElement.classList.remove('wbx-active');
     unfrostAll();   // 清掉通用去白注入的半透明/毛玻璃，彻底回到原生外观
+    // 清掉 tameFullscreenBlur 写在弹层容器上的 inline bg/blur/阴影（打标记才清，不误伤应用自己的 inline）
+    document.querySelectorAll('[data-wbx-tamed="1"]').forEach(function (el) {
+      el.style.removeProperty('background');
+      el.style.removeProperty('backdrop-filter');
+      el.style.removeProperty('-webkit-backdrop-filter');
+      el.style.removeProperty('box-shadow');
+      el.removeAttribute('data-wbx-tamed');
+    });
+    // 排队条避让的位移标记也要一起还原（否则还原主题后排队条仍被顶高一个任务条）
+    var _ov = document.querySelector('.conversation-input-area__prompt-queue-overlay');
+    if (_ov) _ov.removeAttribute('data-wbx-lift');
+    document.body.style.removeProperty('--wbx-queue-lift');
+    state.queueLift = -1;
     if (state.frostMo) { state.frostMo.disconnect(); state.frostMo = null; }
     if (state.frostTimer) { clearInterval(state.frostTimer); state.frostTimer = null; }
     // 持久化：用户主动还原，标记未激活；watchdog 自愈重注或页面刷新都不会再激活
