@@ -97,6 +97,33 @@ def read_host_state(wb_cdp, t):
     return 'fuko', True
 
 
+def read_user_intent(wb_cdp, t):
+    """读主窗 localStorage 的用户意愿（不依赖 body class——还原后 class 已被移除）。
+    active 显式 False = 用户点过「还原默认」→ 守护 sweep 不得再注入
+    （9/21「还原后被守护 20s 内注回」根因：旧版 sweep 无条件注入 + 注入前把 active 强制改回 true）。
+    返回 (theme_key, active)；active 为 None（从未写入）时视作 True。"""
+    try:
+        ws, _ = wb_cdp.connect(t['id'])
+        try:
+            v = wb_cdp.evaluate(ws, """
+(function(){
+    var d = { theme: null, active: null };
+    try {
+        var st = JSON.parse(localStorage.getItem('wbx-theme-state') || '{}');
+        if (st.theme) d.theme = st.theme;
+        if (typeof st.active === 'boolean') d.active = st.active;
+    } catch(e) {}
+    return JSON.stringify(d);
+})()""")
+            d = json.loads(v) if isinstance(v, str) else {}
+        finally:
+            ws.close()
+        return (d.get('theme') or 'fuko'), d.get('active')
+    except Exception as e:
+        log(f'读取用户意愿失败: {e}')
+    return 'fuko', True
+
+
 def load_wb_cdp(port):
     os.environ['CDP_PORT'] = str(port)
     sys.path.insert(0, ROOT)
@@ -187,18 +214,6 @@ def inject_target(wb_cdp, t, tag, theme_key='fuko', host_active=True):
             wb_cdp.evaluate(
                 ws, 'window.__WBX_EMBED__ = true; window.__WBX_RESTORED__ = false;'
                     ' window.__WBX_EMBED_THEME__ = %s;' % json.dumps(theme_key))
-        else:
-            # 清除主题禁用标记（用户若曾“恢复默认设置”，localStorage 会禁用主题）
-            wb_cdp.evaluate(ws, """
-(function(){
-    try {
-        var st = JSON.parse(localStorage.getItem('wbx-theme-state') || '{}');
-        st.active = true;
-        localStorage.setItem('wbx-theme-state', JSON.stringify(st));
-        return 'cleared';
-    } catch(e) { return 'error'; }
-})()
-""")
 
         with open(THEME_FILE, 'r', encoding='utf-8') as f:
             code = f.read()
@@ -235,6 +250,31 @@ def inject_theme(port, watch_seconds=10800):
 
         ok_count = 0
 
+        # 双击快捷方式 / 守护重启 = 明确想启用皮肤：重置「还原」标记（active→true）。
+        # ⚠️ 仅本进程启动这一次；之后 sweep 只读不写——用户中途点「还原默认」后，
+        # 本守护不会再把皮肤注回去（9/21 修复）。
+        def activate_intent():
+            try:
+                for t in wb_cdp.list_targets():
+                    if t.get('type') != 'page':
+                        continue
+                    try:
+                        ws, _ = wb_cdp.connect(t['id'])
+                        wb_cdp.evaluate(ws, """
+(function(){
+    try {
+        var st = JSON.parse(localStorage.getItem('wbx-theme-state') || '{}');
+        st.active = true;
+        localStorage.setItem('wbx-theme-state', JSON.stringify(st));
+    } catch(e) {}
+    return 'ok';
+})()""")
+                        ws.close()
+                    except Exception:
+                        pass
+            except Exception as e:
+                log(f'重置激活意愿失败: {e}')
+
         def sweep():
             nonlocal ok_count
             try:
@@ -248,6 +288,13 @@ def inject_theme(port, watch_seconds=10800):
             for t in ts:
                 if t.get('type') != 'page':
                     continue
+                # ⚠️ 先读用户意愿：显式 active=false = 用户点过「还原默认」→ 主窗不再注入，
+                # iframe 走下方同步还原分支（9/21「还原后被守护 20s 内注回」修复）。
+                # 想再启用：点切换器选主题，或双击桌面快捷方式（启动时重置激活意愿）。
+                k, active = read_user_intent(wb_cdp, t)
+                if active is False:
+                    theme_key, host_active = k, False
+                    continue
                 if inject_target(wb_cdp, t, tag, theme_key, True) == 'ok':
                     ok_count += 1
                     injected_any = True
@@ -260,6 +307,7 @@ def inject_theme(port, watch_seconds=10800):
                     injected_any = True
             return injected_any
 
+        activate_intent()
         sweep()
 
         log(f'进入守护扫描（最长 {watch_seconds}s，空闲后降频至 20s）...')

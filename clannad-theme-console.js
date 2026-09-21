@@ -874,28 +874,56 @@
     } catch (e) { return; }
     window.__wbxMaskGuard = guard;
   }
+  // ⚠️ 性能（9/21）：1s tick 每秒全量重写玻璃层几何 + 白纱会触发整层重绘。
+  // 加几何缓存：布局没变就只保留 guardSidebar，不再写任何样式。
+  // clearMaskOverreach（词根全量扫描 + 逐元素 computed，较贵）从本函数移出，
+  // 由 frostTimer 3s 兜底执行——实时防护已由 installMaskGuard 的 MutationObserver 同帧覆盖。
+  var lastGlassGeo = null;
   function syncGlass() {
     if (!isCurrentGen()) return;
     clearShellVeil();
-    clearMaskOverreach();
     var g = document.getElementById('wbx-glass');
-    if (!g) return;
+    if (!g) { lastGlassGeo = null; return; }
     var sh = document.querySelector('.conversation-shell');
     var full = !sh;
     if (!full) {
       var b0 = sh.getBoundingClientRect();
       if (!b0.width || !b0.height) full = true;
     }
-    g.style.setProperty('display', 'block', 'important');  // important: 免疫旧实例注入的 display:none（多实例定时器竞态致新建任务页闪屏）
+    var geo;
     if (full) {
       // 整窗磨砂模式（专家/自动化/资料库/更多等路由页）：白纱 .5 铺满主内容区；
       // 但侧边栏区域必须留白透出清晰壁纸——否则侧栏内的立绘底下会被玻璃层
       // （模糊壁纸+白纱）糊住，与助理页（玻璃层只覆盖阅读列、侧栏透清晰壁纸）观感不一致
+      var left, width;
       var sbFull = findSidebar();
       if (sbFull) {
         var sbrFull = sbFull.getBoundingClientRect();
-        g.style.left = Math.round(sbrFull.right) + 'px';
-        g.style.width = Math.max(0, window.innerWidth - sbrFull.right) + 'px';
+        left = Math.round(sbrFull.right);
+        width = Math.max(0, window.innerWidth - sbrFull.right);
+      } else {
+        left = 0; width = -1;   // -1 表示 100vw
+      }
+      geo = { full: true, l: left, w: width, v: 0.3 };
+    } else {
+      var b = sh.getBoundingClientRect();
+      var cs = getComputedStyle(sh);
+      // 跟随 .conversation-shell 的内容盒（阅读列 = 文字区），铺满文字区；
+      // 顶部从窗口顶(0)开始——顶栏(.workbuddy-topbar)自身半透明并透出本玻璃层，
+      // 与阅读列无缝衔接，避免顶栏与玻璃层之间出现壁纸接缝（双层白边）
+      var l = b.left + (parseFloat(cs.paddingLeft) || 0);
+      var r = b.right - (parseFloat(cs.paddingRight) || 0);
+      geo = { full: false, l: Math.round(l), w: Math.round(Math.max(0, r - l)), h: Math.round(b.bottom), v: 0.42 };
+    }
+    var same = lastGlassGeo && lastGlassGeo.full === geo.full && lastGlassGeo.l === geo.l &&
+               lastGlassGeo.w === geo.w && lastGlassGeo.h === geo.h && lastGlassGeo.v === geo.v;
+    if (same) { guardSidebar(g); return; }   // 几何未变：不写样式
+    lastGlassGeo = geo;
+    g.style.setProperty('display', 'block', 'important');  // important: 免疫旧实例注入的 display:none（多实例定时器竞态致新建任务页闪屏）
+    if (geo.full) {
+      if (geo.w >= 0) {
+        g.style.left = geo.l + 'px';
+        g.style.width = geo.w + 'px';
       } else {
         g.style.left = '0'; g.style.width = '100vw';
       }
@@ -903,27 +931,20 @@
       g.style.height = '100vh';
       g.style.borderRadius = '0';
       g.style.webkitMaskImage = 'none'; g.style.maskImage = 'none';
-      setGlassVeil(g, 0.3);
+      setGlassVeil(g, geo.v);
       guardSidebar(g);
       return;
     }
-    var b = sh.getBoundingClientRect();
-    var cs = getComputedStyle(sh);
-    // 跟随 .conversation-shell 的内容盒（阅读列 = 文字区），铺满文字区；
-    // 顶部从窗口顶(0)开始——顶栏(.workbuddy-topbar)自身半透明并透出本玻璃层，
-    // 与阅读列无缝衔接，避免顶栏与玻璃层之间出现壁纸接缝（双层白边）
-    var l = b.left + (parseFloat(cs.paddingLeft) || 0);
-    var r = b.right - (parseFloat(cs.paddingRight) || 0);
-    g.style.left = Math.round(l) + 'px';
-    g.style.top = '0';
-    g.style.width = Math.round(Math.max(0, r - l)) + 'px';
-    g.style.height = Math.round(b.bottom) + 'px';
-    g.style.borderRadius = '';
     // mask 交回 CSS 的「四边羽化(左右40px / 上下30px) + 24px 圆角」：
     // 柔边收口，四角与壁纸平滑过渡。切勿用单向下缘渐变覆盖——会把左右/上边变成硬切，
     // 整层看起来就是一块突兀的大白块（9/11 曾因此把版式改丑）。
+    g.style.left = geo.l + 'px';
+    g.style.top = '0';
+    g.style.width = geo.w + 'px';
+    g.style.height = geo.h + 'px';
+    g.style.borderRadius = '';
     g.style.webkitMaskImage = ''; g.style.maskImage = '';
-    setGlassVeil(g, 0.42);
+    setGlassVeil(g, geo.v);
     guardSidebar(g);
   }
 
@@ -1011,6 +1032,11 @@
     var els = document.body.querySelectorAll('*'), n = 0;
     for (var i = 0; i < els.length && n < FROST_MAX; i++) {
       var el = els[i];
+      // ⚠️ 性能短路（9/21）：已磨砂且 inline 底色仍在的元素直接跳过——不必再走
+      // getComputedStyle + getBoundingClientRect。inline 一旦被别处清掉（style.backgroundColor
+      // 为空）就走全流程重写，保留「跨代际能重新喂色」的能力（见 frostable 内注释）。
+      if (el.getAttribute('data-wbx-frost') === '1' &&
+          el.style && el.style.getPropertyValue('background-color')) continue;
       if (!frostable(el)) continue;
       var cs;
       try { cs = getComputedStyle(el); } catch (e) { continue; }
@@ -1111,83 +1137,102 @@
   // 同时把大容器自身白底降到极低，避免与玻璃层白纱叠加成死白。
   function tameFullscreenBlur() {
     if (!isCurrentGen()) return;
-    document.querySelectorAll('*').forEach(function (el) {
-      if (!el.style) return;
-      if (el.closest && el.closest('.conversation-sidebar')) return;
-      if (el.classList && el.classList.contains('conversation-shell')) return;
-      if (el.id === 'wbx-glass' || el.id === 'wbx-ambient' || el.id === 'wbx-motifs') return;
+    // ⚠️ 性能重构（9/21「会话内容多时很卡」）：
+    // 1) 两遍式——第一遍纯读（分类、测量）收集动作，第二遍统一写样式。旧版读写交错
+    //    （命中即写 inline，随后元素继续 getBoundingClientRect），每命中一次就强制重排一次，
+    //    长会话数千节点下是最大的帧率杀手。
+    // 2) 标记短路——处理过且 inline backdrop-filter 仍在的元素直接跳过；inline 被应用
+    //    重写清掉时 getPropertyValue 为空，自动回退全流程重做（自愈）。
+    var all = document.querySelectorAll('*');
+    var actions = [];   // { el, kind: 'modal-small' | 'modal-full' | 'strip' }
+    for (var ti = 0; ti < all.length; ti++) {
+      var el = all[ti];
+      if (!el.style) continue;
+      // 标记短路：tame 写过的元素 inline blur 还在 → 本轮无需再管
+      if (el.getAttribute('data-wbx-tamed') === '1' &&
+          el.style.getPropertyValue('backdrop-filter')) continue;
+      if (el.closest && el.closest('.conversation-sidebar')) continue;
+      if (el.classList && el.classList.contains('conversation-shell')) continue;
+      if (el.id === 'wbx-glass' || el.id === 'wbx-ambient' || el.id === 'wbx-motifs') continue;
       // body/html 绝不能动：applyTheme 靠 inline transparent 压过应用的 html{background:#fff}，
       // 而两者 rect 均为全屏会被下面的大容器判定命中，removeProperty 会把壁纸层的透明底清掉，
       // 导致 z-index:-1 的壁纸/玻璃层被应用的白色画布整个盖死（9/7「壁纸消失」根因）
-      if (el === document.body || el === document.documentElement) return;
-      // ⚠️ 弹层容器（modal/overlay/dialog/drawer/popover 词根）必须保留 backdrop-filter：
-      // 它们覆盖在普通内容之上，磨砂模糊就是可读性来源——被 tame 当"大容器"剥掉 blur 后，
-      // 只剩词根规则的 33% 透明底，底下文字直接穿透混叠（9/12「添加模型弹窗全透明」根因，
-      // 典型受害：settings-modal-overlay、models-settings-panel__editor-overlay）。
-      // 弹层是静态覆盖层、无滚动重绘，保留单层 blur 无掉帧风险（.user-menu-popover 同理已有先例）。
-      // 注意：历史版本曾写过 inline none!important，必须**显式写回 blur**（后写者赢），
-      // 仅"跳过不处理"清不掉残留。blur 参数与词根 CSS 规则保持一致。
+      if (el === document.body || el === document.documentElement) continue;
+      var isOverlay = false;
       try {
-        if (el.className && /(modal|overlay|dialog|drawer|popover)/.test(el.className.toString())) {
-          // .user-menu-popover 主题 CSS 专门写了 blur(20px)，交给下方原有显式排除逻辑，不在此覆盖
-          if (!(el.classList && el.classList.contains('user-menu-popover'))) {
-            var _cls = el.className.toString();
-            // 内容子元素词根排除：BEM 命名下 editor-overlay__title / __close 等也含 "overlay"，
-            // 误喂会造成弹窗内部嵌套色块（同 OVERLAY_SEL 的 :not 排除思路）
-            var _bad = /(title|header|footer|body|content|item|close|btn|button|icon|input|label|tip|arrow|wrapper|container|inner|section|row|col)/.test(_cls);
-            var _rr = el.getBoundingClientRect();
-            var _full = _rr.width * _rr.height > (window.innerWidth || 1) * (window.innerHeight || 1) * 0.9;
-            if (!_bad && !_full) {
-              // 非全屏弹窗本体（二级弹窗/对话框）：56% 主题色玻璃（WBX_MODAL_GLASS，
-              // 与 assertPanelColors 的 OVERLAY_SEL 分支同值——两引擎都写 inline，
-              // 浓度必须一致，否则每 tick 跳变）。词根 CSS 的 33% 对"覆盖在内容上的
-              // 弹窗"太透：底下文字穿透混叠、且与弹窗内白色表单控件色彩不统一。
-              el.style.setProperty('background', WBX_MODAL_GLASS, 'important');
-              el.style.setProperty('backdrop-filter', 'blur(20px) saturate(1.15)', 'important');
-              el.style.setProperty('-webkit-backdrop-filter', 'blur(20px) saturate(1.15)', 'important');
-              el.style.setProperty('box-shadow', '0 24px 60px -24px rgba(60,30,55,.45), inset 0 1px 0 rgba(255,255,255,.5)', 'important');
-            } else {
-              // 全屏遮罩层：保持词根 CSS 的 33% 轻磨砂浓度，只补 blur
-              el.style.setProperty('backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
-              el.style.setProperty('-webkit-backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
-            }
-            // 打标记：restore() 需要知道自己往哪些元素写过 inline blur/bg——
-            // 否则「一键还原」后这些 inline 仍残留（9/18 实测：还原后
-            // .conversation-input-area__prompt-queue-overlay 仍带 blur(14px) inline）。
-            el.setAttribute('data-wbx-tamed', '1');
-          }
-          return;  // forEach 回调：return 即跳过后续大容器清 blur 流程
-        }
+        isOverlay = !!(el.className && /(modal|overlay|dialog|drawer|popover)/.test(el.className.toString()));
       } catch (e) {}
+      if (isOverlay) {
+        // ⚠️ 弹层容器（modal/overlay/dialog/drawer/popover 词根）必须保留 backdrop-filter：
+        // 它们覆盖在普通内容之上，磨砂模糊就是可读性来源——被 tame 当"大容器"剥掉 blur 后，
+        // 只剩词根规则的 33% 透明底，底下文字直接穿透混叠（9/12「添加模型弹窗全透明」根因）。
+        // .user-menu-popover 主题 CSS 专门写了 blur(20px)，交给下方原有显式排除逻辑，不在此覆盖
+        if (el.classList && el.classList.contains('user-menu-popover')) continue;
+        var _cls = el.className.toString();
+        // 内容子元素词根排除：BEM 命名下 editor-overlay__title / __close 等也含 "overlay"，
+        // 误喂会造成弹窗内部嵌套色块（同 OVERLAY_SEL 的 :not 排除思路）
+        var _bad = /(title|header|footer|body|content|item|close|btn|button|icon|input|label|tip|arrow|wrapper|container|inner|section|row|col)/.test(_cls);
+        var _rr = el.getBoundingClientRect();
+        var _full = _rr.width * _rr.height > (window.innerWidth || 1) * (window.innerHeight || 1) * 0.9;
+        if (!_bad && !_full) {
+          // 非全屏弹窗本体（二级弹窗/对话框）：56% 主题色玻璃（WBX_MODAL_GLASS，
+          // 与 assertPanelColors 的 OVERLAY_SEL 分支同值——两引擎都写 inline，
+          // 浓度必须一致，否则每 tick 跳变）
+          actions.push({ el: el, kind: 'modal-small' });
+        } else {
+          // 全屏遮罩层：保持词根 CSS 的 33% 轻磨砂浓度，只补 blur
+          actions.push({ el: el, kind: 'modal-full' });
+        }
+        continue;  // 弹层不走后续大容器清 blur 流程
+      }
       // ⚠️ 用户资料下拉浮层 .user-menu-popover 是 fixed + z-index:1100 + 高度 > 50% 视口，
       // 应用原生 inline 已经写了 `backdrop-filter: none !important`，tame 也按大容器规则会再
       // 覆写一遍 backdrop-filter: none !important —— 但主题 CSS 已经专门给它 blur(20px) 了，
       // 这里必须排除掉，否则毛玻璃磨砂永远被清。
-      if (el.classList && el.classList.contains('user-menu-popover')) return;
+      if (el.classList && el.classList.contains('user-menu-popover')) continue;
       // disclaimer 类容器需要保留自己的 backdrop-filter blur，让它「融入玻璃层」
       // 而不是直接显成突兀白框——排除这些元素，避免被 tame 强制清 blur
       if (el.classList && (
         el.classList.contains('conversation-input-area__disclaimer') ||
         el.classList.contains('claw-local-empty__disclaimer')
-      )) return;
+      )) continue;
       var r = el.getBoundingClientRect();
-      if (!(r.width > window.innerWidth * 0.5 || r.height > window.innerHeight * 0.5)) return;
-      el.style.setProperty('backdrop-filter', 'none', 'important');
-      el.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
-      // 清理历史版本写下的 inline 背景残留（transparent / 白底 .10 等）——
-      // inline !important 优先级最高，不清掉会永久钉死透明/白色，覆盖预置 CSS 的主题色。
-      // 底色统一交给预置 CSS 的 var(--wbx-panel)（主题色）
-      // 但**不要**清掉被 frostWhites 标记过的元素：frostWhites 已经把它们写成 55% 主题色透底
-      // ——这是最理想的"壁纸可见 + 主题色调和"中间值；removeProperty 会让它回退到应用原生
-      // .claw-workspace { background:#fff } 等不透明壳底，整个面板再次被纯白盖死。
-      // data-wbx-veil="off" 的壳是「去蒙层」目标（clearShellVeil 写的 inline transparent
-      // 就是最终态）。若在这里被 removeProperty，会退回应用原生的 30% 面板底，
-      // 与 #wbx-glass 的磨砂重新叠成「对话区两层模糊」——必须一起跳过。
-      if (el.getAttribute('data-wbx-frost') !== '1' && el.getAttribute('data-wbx-veil') !== 'off') {
-        el.style.removeProperty('background');
-        el.style.removeProperty('background-color');
+      if (!(r.width > window.innerWidth * 0.5 || r.height > window.innerHeight * 0.5)) continue;
+      actions.push({ el: el, kind: 'strip' });
+    }
+    // 第二遍：统一写（此后本轮不再有布局读取，无强制重排）
+    for (var ai = 0; ai < actions.length; ai++) {
+      var act = actions[ai], ael = act.el;
+      if (act.kind === 'modal-small') {
+        ael.style.setProperty('background', WBX_MODAL_GLASS, 'important');
+        ael.style.setProperty('backdrop-filter', 'blur(20px) saturate(1.15)', 'important');
+        ael.style.setProperty('-webkit-backdrop-filter', 'blur(20px) saturate(1.15)', 'important');
+        ael.style.setProperty('box-shadow', '0 24px 60px -24px rgba(60,30,55,.45), inset 0 1px 0 rgba(255,255,255,.5)', 'important');
+      } else if (act.kind === 'modal-full') {
+        ael.style.setProperty('backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
+        ael.style.setProperty('-webkit-backdrop-filter', 'blur(14px) saturate(1.1)', 'important');
+      } else {
+        ael.style.setProperty('backdrop-filter', 'none', 'important');
+        ael.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+        // 清理历史版本写下的 inline 背景残留（transparent / 白底 .10 等）——
+        // inline !important 优先级最高，不清掉会永久钉死透明/白色，覆盖预置 CSS 的主题色。
+        // 但**不要**清掉被 frostWhites 标记过的元素：frostWhites 已经把它们写成 55% 主题色透底
+        // ——这是最理想的"壁纸可见 + 主题色调和"中间值；removeProperty 会让它回退到应用原生
+        // .claw-workspace { background:#fff } 等不透明壳底，整个面板再次被纯白盖死。
+        // data-wbx-veil="off" 的壳是「去蒙层」目标（clearShellVeil 写的 inline transparent
+        // 就是最终态）。若在这里被 removeProperty，会退回应用原生的 30% 面板底，
+        // 与 #wbx-glass 的磨砂重新叠成「对话区两层模糊」——必须一起跳过。
+        if (ael.getAttribute('data-wbx-frost') !== '1' && ael.getAttribute('data-wbx-veil') !== 'off') {
+          ael.style.removeProperty('background');
+          ael.style.removeProperty('background-color');
+        }
       }
-    });
+      // 打标记：restore() 需要知道自己往哪些元素写过 inline blur/bg——
+      // 否则「一键还原」后这些 inline 仍残留（9/18 实测：还原后
+      // .conversation-input-area__prompt-queue-overlay 仍带 blur(14px) inline）。
+      // 大容器剥 blur 也打同一标记（restore 一并清掉），并兼作 tame 自身的短路缓存。
+      ael.setAttribute('data-wbx-tamed', '1');
+    }
   }
   var frostTimer = null;
   function scheduleFrost() {
@@ -1254,9 +1299,14 @@
     try {
       var stored = localStorage.getItem('wbx-theme-state');
       var st = stored ? JSON.parse(stored) : null;
-      // 嵌入模式（iframe）或强制激活：忽略用户的历史还原操作（active:false）
-      // 确保每次双击快捷方式启动时主题都能生效，而不是依赖用户曾经的手动恢复
-      if (EMBED || (st && !st.active && !window.__WBX_USER_PREFERRED_INACTIVE)) {
+      // 嵌入模式（iframe）：不读 localStorage（宿主与 iframe 不同源，且 workbuddy.cn 域下
+      // 可能残留历史 active:false 导致整页原生白底），始终激活，主题 key 由主窗注入时传入。
+      // 主窗模式：**尊重** active:false——用户点过「还原默认」就是明确意愿，
+      // 自愈重注 / 页面刷新 / 守护 sweep 都不得再激活；
+      // 想再启用：点切换器选主题（applyTheme 会写回 active:true）或双击桌面快捷方式
+      // （启动脚本会把 active 重置为 true——双击这个动作本身就是「我要用皮肤」）。
+      // （旧版这里曾无条件把 active:false 强制回 true，导致「还原后被守护 20s 内注回」）
+      if (EMBED) {
         return { active: true, theme: st ? st.theme : 'fuko' };
       }
       return st || { active: true, theme: 'fuko' };
@@ -1385,9 +1435,17 @@
     state.mo.observe(root, { childList: true, subtree: true });
 
     // 去白：路由页面（助理/专家/技能/连接器/自动化/资料库/更多）挂载后自动磨砂新出现的白容器
-    state.frostMo = new MutationObserver(function () {
+    // ⚠️ 性能关键（9/21）：对话区（.conversation-shell 内）的变更——消息流式输出、
+    // 气泡追加、输入框打字——**不调度** frostWhites。长会话 DOM 数千节点，全量扫描
+    // （querySelectorAll('*') + 逐元素 rect 测量）250ms 一轮会把帧率拖垮（「会话内容多时很卡」根因）。
+    // 对话区内可磨砂元素由 frostTimer 3s 兜底覆盖；路由切换/弹层挂载都在 shell 外，立即调度不受影响。
+    state.frostMo = new MutationObserver(function (muts) {
       if (!isCurrentGen()) { try { state.frostMo.disconnect(); } catch (e) {} return; }
-      scheduleFrost();
+      for (var fi = 0; fi < muts.length; fi++) {
+        var fn = muts[fi].target;
+        var fe = fn && fn.nodeType === 1 ? fn : (fn && fn.parentElement);
+        if (!fe || !fe.closest || !fe.closest('.conversation-shell')) { scheduleFrost(); return; }
+      }
     });
     state.frostMo.observe(root, { childList: true, subtree: true });
     scheduleFrost();
@@ -1396,6 +1454,9 @@
     state.frostTimer = setInterval(function () {
       if (!isCurrentGen()) { clearInterval(state.frostTimer); return; }
       frostWhites();
+      // clearMaskOverreach 从 syncGlass 1s tick 移到这里（9/21 性能）：词根全量扫描较贵，
+      // 3s 兜底即可；实时防护由 installMaskGuard 的 MutationObserver 同帧覆盖
+      clearMaskOverreach();
       // 兜底：清掉 tame 早前在 disclaimer 上写过的 inline backdrop-filter:none，
       // 让 CSS 的 blur 规则能生效（inline !important 优先级最高，必须主动 removeProperty）
       document.querySelectorAll('.conversation-input-area__disclaimer, .claw-local-empty__disclaimer').forEach(function (d) {
@@ -1411,6 +1472,7 @@
     if (state.ambient) { state.ambient.remove(); state.ambient = null; }
     var gl = document.getElementById('wbx-glass');
     if (gl) gl.remove();
+    lastGlassGeo = null;   // 玻璃层几何缓存失效（还原后重新启用时要从头写几何）
     if (state.glassRo) { state.glassRo.disconnect(); state.glassRo = null; }
     if (state.glassTimer) { clearInterval(state.glassTimer); state.glassTimer = null; }
     document.body.classList.remove('wbx-active');

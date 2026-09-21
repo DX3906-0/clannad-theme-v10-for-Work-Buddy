@@ -89,7 +89,26 @@ assets/
 
 ## 关键架构（防回归备忘）
 
-- **玻璃层 `#wbx-glass`**：预模糊壁纸 JPEG + 42% 白纱，`syncGlass()` 每秒写几何。
+- **「还原默认」后守护不得再注入**（9/21「切回原皮肤又被自动注入」根因）：
+  用户点 ↺ 后 `restore()` 写 `localStorage wbx-theme-state.active=false`，
+  **所有注入方都必须尊重它**：① `loadState()` 主窗模式读到 `active:false` 保持原生
+  （旧版曾无条件强制回 `active:true`——正是重注帮凶）；② 注入脚本（`start-wb-with-skin.py`）
+  sweep 前先 `read_user_intent()` 读意愿，显式 false 则主窗跳过、iframe 走同步还原分支，
+  **绝不允许**在注入路径里把 `active` 改回 true；③ 唯一允许重置激活的时机 =
+  双击桌面快捷方式（`inject_theme()` 开头 `activate_intent()`，这个动作本身就是
+  「我要用皮肤」）或点切换器选主题。自愈守护 `wb-skin-watchdog.py` 已内置同款尊重逻辑
+  （`SKIP inject (user restored default)`）。
+- **长会话卡顿三防线**（9/21「会话内容多时很卡」根因 = 流式输出每 token 触发全量扫描）：
+  ① `frostMo` 观察器**过滤对话区变更**——mutation 全在 `.conversation-shell` 内不调度
+  `frostWhites`（路由/弹层都在 shell 外，不受影响），对话区磨砂由 3s `frostTimer` 兜底；
+  ② `frostWhites` 对已磨砂且 inline 底色仍在的元素短路（`data-wbx-frost=1` 且
+  `style.backgroundColor` 非空即 continue，inline 被清则自动走全流程重写，保留跨代际重喂能力）；
+  ③ `tameFullscreenBlur` 两遍式（先纯读收集动作、再统一写，消除读写交错强制重排）+
+  `data-wbx-tamed` 且 inline blur 仍在的元素短路（大容器剥 blur 也打同一标记）。
+  另：`syncGlass` 有几何缓存（布局没变不写样式、不重绘），`clearMaskOverreach` 从
+  1s tick 移到 3s 兜底（实时防护由 `installMaskGuard` 同帧 MutationObserver 覆盖）。
+  改这些引擎时**不得删掉短路/过滤**，否则长会话帧率立刻回退。
+- **玻璃层 `#wbx-glass`**：预模糊壁纸 JPEG + 42% 白纱，`syncGlass()` 每秒写几何（带缓存）。
   CSS 自带**四边羽化（左右 40px / 上下 30px）+ 24px 圆角**——JS 里**不要覆盖 mask**（保持 `''` 回落 CSS）。
 - **frostable 引擎**：扫白底容器写 55% 主题色。必须排除侧栏**及其祖先**（`_gridViewItem` 包着侧栏，
   `closest()` 查不到祖先链下方的排除目标，需要 `querySelector()` 反查）。
