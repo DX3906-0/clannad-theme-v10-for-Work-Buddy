@@ -715,24 +715,54 @@
   // CSS 规则（stylesheet 级 !important 打不过），只有 inline !important 能覆盖，
   // 因此这里用 JS 强制清透明；加 data 标记避免每帧重复写。
   function clearShellVeil() {
-    var list = ['.teams-content-wrapper', '.conversation-shell', '.teams-main-content', '.conversation-page-chrome'];
+    var list = ['.teams-content-wrapper', '.conversation-shell', '.teams-main-content', '.conversation-page-chrome',
+                // 9/25 应用更新：主壳改为 css-modules hash 类名（_gridView_xxx）+ teams-* 新结构，
+                // 旧名单全部落空 → 整窗不透明白底盖死壁纸（「只剩侧栏立绘」根因）。补新类名。
+                '.teams-container', '.teams-grid-scroll-content', '[class*="_gridView_"]'];
     for (var i = 0; i < list.length; i++) {
       var els = document.querySelectorAll(list[i]);
       for (var j = 0; j < els.length; j++) {
-        var el = els[j];
-        // 每次都校验补回：frostable / tameFullscreenBlur 是不同 tick 上的不同引擎，
-        // 它们会 removeProperty 掉这里的 inline。一旦被清，就退回应用原生的 30% 面板底，
-        // 与 #wbx-glass 重新叠成「两层模糊」。inline !important 是唯一能压过该源规则的写法。
-        if (el.style.getPropertyValue('background-color') === 'transparent') {
-          el.setAttribute('data-wbx-veil', 'off');
-          continue;
-        }
-        el.style.setProperty('background', 'transparent', 'important');
-        el.style.setProperty('background-color', 'transparent', 'important');
-        el.removeAttribute('data-wbx-frost');
-        el.setAttribute('data-wbx-veil', 'off');
+        veilOff(els[j]);
       }
     }
+    // 【9/25 语义兜底（治本）】光补类名是打地鼠——应用再改版还会回归。
+    // 结构性判定：凡「包含侧栏或阅读列的祖先壳」+ 面积 ≥ 50% 视口 + 不透明浅色底
+    // → 一律去蒙层（这批壳正是 frostable 排除、交给本函数处理的那批）。
+    // 应用今后改类名，只要结构仍是「壳包侧栏+阅读列」就自动兜住。
+    if (!document.body.classList.contains('wbx-active')) return;
+    var anchors = [document.querySelector('.conversation-sidebar'), document.querySelector('.conversation-shell')];
+    for (var k = 0; k < anchors.length; k++) {
+      if (!anchors[k]) continue;
+      var up = anchors[k].parentElement;
+      while (up && up !== document.body) {
+        var r = up.getBoundingClientRect();
+        if (r.width * r.height >= (innerWidth || 1) * (innerHeight || 1) * 0.5) {
+          var cs = getComputedStyle(up);
+          var bg = cs.backgroundColor;
+          // 只处理「接近不透明」的壳：rgb(...) 全不透明；rgba(...) 需 alpha ≥ 0.85。
+          // 半透明面板底（rgba(...,0.1~0.3)）是主题 CSS 故意给的层次，不许清
+          var am = bg && bg.match(/^rgba?\([^)]*?,\s*([\d.]+)\s*\)$/);
+          var alpha = am ? parseFloat(am[1]) : 1;
+          var opaque = bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && alpha >= 0.85;
+          // 只处理真的不透明的壳；已透明（含本函数此前写过 inline transparent 的）直接标记跳过
+          if (opaque || up.getAttribute('data-wbx-veil') === 'off') veilOff(up);
+        }
+        up = up.parentElement;
+      }
+    }
+  }
+  // 「去蒙层」单元素动作：写 inline transparent（每 tick 校验补回——frostable/tame 是不同
+  // tick 的不同引擎，会 removeProperty 掉这里的 inline；一旦被清就退回应用原生 30% 面板底，
+  // 与 #wbx-glass 重新叠成「两层模糊」）。inline !important 是唯一能压过该源规则的写法。
+  function veilOff(el) {
+    if (el.style.getPropertyValue('background-color') === 'transparent') {
+      el.setAttribute('data-wbx-veil', 'off');
+      return;
+    }
+    el.style.setProperty('background', 'transparent', 'important');
+    el.style.setProperty('background-color', 'transparent', 'important');
+    el.removeAttribute('data-wbx-frost');
+    el.setAttribute('data-wbx-veil', 'off');
   }
   // ---------------------------------------------------------------
   // 【9/11 新增】clearMaskOverreach —— 遮罩词根规则的"越界"兜底
