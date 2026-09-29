@@ -160,6 +160,22 @@ def cycle():
                     _skip_logged.add(tid)
                     log("SKIP inject (user restored default) ->", tid[:14])
                 continue
+            # 9/29:设置界面已改为独立窗口（page target，DOM 特征 .settings-window-root），
+            # 保持原生外观——立绘/粒子图层会铺满其透明壳，绝不注入。
+            # 主题脚本开头也有一份同款守卫（就地清理后退出），这里是注入方侧的第一道闸，
+            # 免得每轮 CLEANUP_JS + 3.9MB eval 空转。
+            try:
+                is_settings = wb_cdp.evaluate(
+                    ws,
+                    "!!document.querySelector('.settings-window-root, .settings-modal--window')",
+                )
+            except Exception:
+                is_settings = False
+            if str(is_settings).strip().lower() in ("true", "1"):
+                if ("s:" + tid) not in _skip_logged:
+                    _skip_logged.add("s:" + tid)
+                    log("SKIP inject (settings window) ->", tid[:14])
+                continue
             if present and skin_mtime == last_injected_mtime:
                 continue
             idle = False

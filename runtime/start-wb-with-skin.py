@@ -194,6 +194,17 @@ def inject_target(wb_cdp, t, tag, theme_key='fuko', host_active=True):
         return 'fail'
     try:
         ws.call('Runtime.enable')
+        # 9/29:设置界面已改为独立窗口(page target,DOM 特征 .settings-window-root)，
+        # 它保持原生外观——立绘/粒子图层会铺满其透明壳，绝不注入
+        if not embed:
+            try:
+                if str(wb_cdp.evaluate(
+                        ws, "!!document.querySelector('.settings-window-root, .settings-modal--window')")
+                       ).strip().lower() in ('true', '1'):
+                    log(f'[page][{title}] 设置窗口，跳过注入')
+                    return 'skip'
+            except Exception:
+                pass
         # 幂等：已注入且玻璃层仍在则跳过（页面导航后 glass 会消失，需重注）
         already = wb_cdp.evaluate(
             ws, f'!!(window.__WBX_INJECTED__ === {json.dumps(tag)} && document.getElementById("wbx-glass"))')
