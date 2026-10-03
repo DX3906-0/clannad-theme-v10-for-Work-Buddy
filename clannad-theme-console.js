@@ -293,12 +293,16 @@
     // 这里补 :not() 排除这些内容容器词根，保留 mask/backdrop/overlay 对真遮罩的匹配。
     + 'body.wbx-active :is([class*="mask"],[class*="wrap"],[class*="backdrop"],[class*="overlay"],[class*="holder"])'
     + ':not([class*="wbx"]):not([class*="-wrapper"]):not([class*="wb-home"]):not([class*="wb-slot"])'
-    + ':not([class*="cr-input"]):not([class*="phrase-content"]):not([class*="agent-card"]):not([class*="bottom-mask"]) {'
+    + ':not([class*="cr-input"]):not([class*="phrase-content"]):not([class*="agent-card"]):not([class*="bottom-mask"])'
+    // 产物面板（.detail-panel，新版 md/代码预览）是文档预览：任何磨砂都会糊住正文。
+    // sc-code-block-wrap 含 "wrap" 曾被本规则命中 → 代码块 blur(14px)（10/3 用户反馈）。
+    // ⚠️ 对话区玻璃规则一律排除 .detail-panel 后代（含下方 cr-text-block / cr-tool-exp 等条目）
+    + ':not(.detail-panel *) {'
     + '  background: color-mix(in srgb, color-mix(in srgb, var(--wbx-accent, #d96a92) 22%, var(--wbx-panel, rgba(255,255,255,.58))) 42%, transparent) !important;'
     + '  backdrop-filter: blur(14px) saturate(1.1) !important;'
     + '  -webkit-backdrop-filter: blur(14px) saturate(1.1) !important; }'
     // 用户自己的消息气泡也改为柔和白色虚化，与主对话区风格统一
-    + 'body.wbx-active .cr-self-bubble {'
+    + 'body.wbx-active .cr-self-bubble:not(.detail-panel *) {'
     + '  background: rgba(255,255,255,.62) !important;'
     + '  border: 1px solid rgba(255,255,255,.55); border-radius: 16px;'
     + '  backdrop-filter: blur(6px) saturate(1.05); -webkit-backdrop-filter: blur(6px) saturate(1.05);'
@@ -321,13 +325,13 @@
     + '  backdrop-filter: blur(14px) saturate(1.1);'
     + '  -webkit-backdrop-filter: blur(14px) saturate(1.1); }'
     // 工具调用展开内容块：白色虚化，消除突兀的纯灰块
-    + 'body.wbx-active .cr-tool-exp__content {'
+    + 'body.wbx-active .cr-tool-exp__content:not(.detail-panel *) {'
     + '  background: rgba(255,255,255,.42) !important;'
     + '  backdrop-filter: blur(14px) saturate(1.1);'
     + '  -webkit-backdrop-filter: blur(14px) saturate(1.1); }'
     // 对话内的代码块：原为纯白，改为轻度白色虚化，保持语法可读性同时与整体磨砂风格统一
-    + 'body.wbx-active .cr-code-like-box,'
-    + 'body.wbx-active .cr-code-like-box__header {'
+    + 'body.wbx-active .cr-code-like-box:not(.detail-panel *),'
+    + 'body.wbx-active .cr-code-like-box__header:not(.detail-panel *) {'
     + '  background: rgba(255,255,255,.9) !important;'
     + '  backdrop-filter: blur(8px) saturate(1.05);'
     + '  -webkit-backdrop-filter: blur(8px) saturate(1.05); }'
@@ -380,7 +384,8 @@
     + '  -webkit-mask-composite: source-in; mask-composite: intersect; }'
     // 助手消息气泡：白色虚化聊天框（随内容收缩、左对齐）
     // 与用户气泡 .cr-self-bubble 同浓度（.62），两侧观感一致（9/7 用户要求统一）
-    + 'body.wbx-active .cr-text-block, body.wbx-active .assistant-message:not([class*="loadingMessage"]) {'
+    + 'body.wbx-active .cr-text-block:not(.detail-panel *), '
+    + 'body.wbx-active .assistant-message:not([class*="loadingMessage"]):not(.detail-panel *) {'
     + '  background: rgba(255,255,255,.62) !important;'
     + ''
     + '  border: 1px solid rgba(255,255,255,.55); border-radius: 16px; padding: 10px 16px;'
@@ -1115,6 +1120,10 @@
       // 为空）就走全流程重写，保留「跨代际能重新喂色」的能力（见 frostable 内注释）。
       if (el.getAttribute('data-wbx-frost') === '1' &&
           el.style && el.style.getPropertyValue('background-color')) continue;
+      // ⚠️ 产物面板（.detail-panel，md/代码/表格预览）整树排除：面板内白底内容块
+      // （sc-block 表格单元格、sc-image-media、cr-text-block…）是文档正文，不是"待磨砂白容器"，
+      // 喂透底+blur 会把预览糊成毛玻璃（10/3 用户反馈）。预览必须保持原生干净。
+      if (el.closest && el.closest('.detail-panel')) continue;
       if (!frostable(el)) continue;
       var cs;
       try { cs = getComputedStyle(el); } catch (e) { continue; }
@@ -1240,6 +1249,10 @@
       try {
         isOverlay = !!(el.className && /(modal|overlay|dialog|drawer|popover)/.test(el.className.toString()));
       } catch (e) {}
+      // ⚠️ 产物面板（.detail-panel）内的 "overlay" 是编辑器内部内容层（sc-editor-content-overlay），
+      // 不是弹窗——误写 blur(14px) 会把整个文档预览糊住（10/3 用户反馈）。
+      // 面板后代一律不走弹层写 blur 分支，放行到下方大容器 strip 分支（只清 blur 不写 blur）
+      if (isOverlay && el.closest && el.closest('.detail-panel')) isOverlay = false;
       if (isOverlay) {
         // ⚠️ 弹层容器（modal/overlay/dialog/drawer/popover 词根）必须保留 backdrop-filter：
         // 它们覆盖在普通内容之上，磨砂模糊就是可读性来源——被 tame 当"大容器"剥掉 blur 后，

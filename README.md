@@ -89,6 +89,18 @@ assets/
 
 ## 关键架构（防回归备忘）
 
+- **产物面板（.detail-panel）整树禁磨砂**（10/3「产物栏被蒙模糊层」根因）：
+  应用新版把 `cr-*` 类名同时用于对话区和产物面板（cr-text-block=正文块、
+  cr-tool-exp__content=写作内容、sc-editor-content-overlay=编辑器内容层、
+  sc-code-block-wrap=代码块），主题三条对话区玻璃规则 + tame 弹层词根分支 +
+  frostWhites 去白引擎**三处全部误伤**，把文档预览糊成毛玻璃。
+  修法：① 气泡/代码块/工具内容 CSS 规则一律 `:not(.detail-panel *)`；
+  ② tame 弹层分支对 .detail-panel 后代 isOverlay 强制 false（放行 strip 清 blur）；
+  ③ frostWhites 循环对 .detail-panel 后代直接 continue。
+  原则：**预览/编辑器类面板 = 文档正文 = 原生干净**，任何磨砂都是错的。
+  ⚠️ 已中毒元素带 tamed/frost 标记会被引擎短路挡住自动清理，修完代码必须
+  手动清一遍面板内 inline + 标记。
+
 - **整窗壳去蒙层必须语义兜底**（9/25「版本更新后只剩侧栏立绘」根因）：
   应用更新把主壳改成 css-modules hash 类名（`_gridView_7xbcw_9`）+ `teams-*` 新结构，
   `clearShellVeil` 的**类名名单**全部落空 → 不透明白底盖死 z=-1 的壁纸/玻璃层，
