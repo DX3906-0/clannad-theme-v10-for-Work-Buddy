@@ -607,6 +607,11 @@
     + '#wbx-motifs { display: none; }'
     + 'body.wbx-active #wbx-motifs { display: block; position: absolute; left: 0; right: 0; top: 0; bottom: 0; z-index: 0; pointer-events: none; opacity: 1; transition: opacity .4s ease; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 90%, rgba(0,0,0,.5) 100%); mask-image: linear-gradient(to bottom, #000 90%, rgba(0,0,0,.5) 100%); }'
     + 'body.wbx-active #wbx-motifs .wbx-motif-img { width: 100%; height: 100%; object-fit: cover; object-position: center top; display: block; filter: drop-shadow(0 4px 10px rgba(40,20,40,.25)); }'
+    // ⚠️ 立绘挂错宿主的兜底：开机首启时侧栏(.conversation-sidebar)常未渲染，buildMotif 只能
+    // 把 #wbx-motifs 暂挂 body——而上面的 absolute+四边 0 是相对「最近定位祖先」的，挂在 body
+    // 下就等于相对视口全屏铺开 → 立绘糊满整窗（10/16 用户反馈「开机第一次打开立绘全屏渲染」）。
+    // 规则：立绘只允许活在侧栏内；挂在 body 下的一律隐藏（等 glassTimer 自愈搬进侧栏后再显示）。
+    + 'body.wbx-active > #wbx-motifs { display: none !important; }'
     + '.conversation-sidebar { position: relative; }'
     + '.conversation-sidebar > ul, .conversation-sidebar .conversation-list, .conversation-sidebar section { position: relative; z-index: 1; }';
 
@@ -728,6 +733,19 @@
     state.motifs = host;
     var src = ASSETS[key];
     host.innerHTML = src ? '<img class="wbx-motif-img" src="' + src + '" alt="">' : '';
+  }
+
+  // 立绘宿主自愈：开机首启侧栏未渲染时 buildMotif 把 #wbx-motifs 暂挂 body（全屏糊脸，
+  // 已由 CSS body>#wbx-motifs{display:none} 兜底隐藏）；侧栏就绪后由 glassTimer 每秒调
+  // 本函数把立绘搬进侧栏。只在宿主不对时执行 buildMotif（幂等），正常态零开销。
+  function syncMotifHost() {
+    var sb = document.querySelector('.conversation-sidebar');
+    if (!sb) return;                       // 侧栏未就绪：保持隐藏，下轮再试
+    var host = state.motifs || document.getElementById('wbx-motifs');
+    if (!host) return;
+    if (host.parentElement === sb) return; // 已在侧栏内（含首次挂载成功的情况）
+    // 宿主是 body / 被路由切换重建的旧侧栏拖走 → 重新挂载（buildMotif 内部会搬节点+重建图）
+    buildMotif(document.body.getAttribute('data-wbx-last') || 'nagisa');
   }
 
   // 玻璃层定位：跟随 .conversation-shell 的内容盒（左右各内缩 48px 的那块阅读列）
@@ -1513,6 +1531,7 @@
     state.glassTimer = setInterval(function () {
       if (!isCurrentGen()) { clearInterval(state.glassTimer); return; }   // 旧实例自毁，避免与新实例抢写
       syncGlass();
+      syncMotifHost();     // 立绘宿主自愈（首启侧栏未就绪时暂挂 body 的纠正）
       tameGrowthBuddy();   // 宠物避让兜底（任务条/排队消息条出现时隐藏）
       syncQueueLift();     // 排队条避让后台任务条（同上：兜底测量）
     }, 1000);
