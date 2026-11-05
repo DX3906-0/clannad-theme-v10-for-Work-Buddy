@@ -20,6 +20,42 @@
   if (window.self !== window.top) {
     var _proto = location.protocol;
     var _isRemote = (_proto === 'http:' || _proto === 'https:');
+    // ⚠️ 11/3 加固：loopback（127.0.0.1/localhost）的 http iframe 不是「远程网页」，
+    // 是应用内置的本地文档预览（markdown-shared-guest 等）。此前注入方把所有 http(s)
+    // iframe 都当远程页注入 → #wbx-glass 玻璃层 + frostWhites 白纱整层铺进预览文档，
+    // 正文被毛玻璃糊住（11/3 用户反馈「右侧预览的文档被渲染了一层模糊层看不清文字」）。
+    // loopback 预览保持原生外观：上方清理段已删 style/DOM 层，这里再补齐 body class
+    // 与 inline 残留（frostWhites/tame 写的是 inline !important，删 style 元素清不掉），
+    // 然后退出——无论哪个注入源（本注入器/外部脚本）都防得住。
+    var _host = '';
+    try { _host = (location && location.hostname) || ''; } catch (e) {}
+    var _isLoopback = (_host === '127.0.0.1' || _host === 'localhost' || _host === '[::1]');
+    if (_isLoopback) {
+      window.__WBX_GEN__ = (window.__WBX_GEN__ || 0) + 1;   // 旧实例定时器全部自毁
+      try {
+        document.body.classList.remove('wbx-active');
+        document.documentElement.classList.remove('wbx-active');
+        document.querySelectorAll('[data-wbx-tamed="1"]').forEach(function (el) {
+          el.style.removeProperty('background');
+          el.style.removeProperty('backdrop-filter');
+          el.style.removeProperty('-webkit-backdrop-filter');
+          el.style.removeProperty('box-shadow');
+          el.removeAttribute('data-wbx-tamed');
+        });
+        document.querySelectorAll('[data-wbx-frost="1"]').forEach(function (el) {
+          el.style.removeProperty('background-color');
+          el.style.removeProperty('backdrop-filter');
+          el.style.removeProperty('-webkit-backdrop-filter');
+          el.removeAttribute('data-wbx-frost');
+        });
+        document.querySelectorAll('[data-wbx-veil="off"]').forEach(function (el) {
+          el.removeAttribute('data-wbx-veil');
+        });
+        window.__WBX_EMBED__ = false;
+        window.__WBX_INJECTED__ = undefined;
+      } catch (e) {}
+      return;
+    }
     if (!_isRemote || !window.__WBX_EMBED__) { return; }
   }
   // ⚠️ 9/29:设置界面已改为独立窗口(单独 page target,DOM 特征 .settings-window-root /
@@ -1016,10 +1052,20 @@
       var r = b.right - (parseFloat(cs.paddingRight) || 0);
       geo = { full: false, l: Math.round(l), w: Math.round(Math.max(0, r - l)), h: Math.round(b.bottom), v: 0.42 };
     }
+    // ⚠️ 缓存键必须包含**模糊图版本**（10/3 起用户反馈"切壁纸中间对话区没切换"根因）：
+    // buildBlurWall 是异步的（Image.onload + canvas），算完只写 g.dataset.blurUrl 再调
+    // syncGlass()。但 9/21 的几何缓存只比 l/w/h/v——切主题时**布局完全没变**，
+    // 于是这里判定 same 直接 return，新 blurUrl 永远写不进 backgroundImage，
+    // 玻璃层一直显示上一张壁纸的模糊图（数据层已更新、视觉层恒旧）。
+    // 修法：把 blurUrl 长度+指纹纳入缓存键，图变了就必须重走 setGlassVeil。
+    var _bu = g.dataset.blurUrl || '';
+    var _buKey = _bu ? (_bu.length + ':' + _bu.slice(30, 62)) : '';
     var same = lastGlassGeo && lastGlassGeo.full === geo.full && lastGlassGeo.l === geo.l &&
-               lastGlassGeo.w === geo.w && lastGlassGeo.h === geo.h && lastGlassGeo.v === geo.v;
-    if (same) { guardSidebar(g); return; }   // 几何未变：不写样式
+               lastGlassGeo.w === geo.w && lastGlassGeo.h === geo.h && lastGlassGeo.v === geo.v &&
+               lastGlassGeo.bu === _buKey;
+    if (same) { guardSidebar(g); return; }   // 几何与模糊图都没变：不写样式
     lastGlassGeo = geo;
+    lastGlassGeo.bu = _buKey;
     g.style.setProperty('display', 'block', 'important');  // important: 免疫旧实例注入的 display:none（多实例定时器竞态致新建任务页闪屏）
     if (geo.full) {
       if (geo.w >= 0) {
