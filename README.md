@@ -6,18 +6,7 @@
 
 6 个角色主题，每个都有自己的壁纸、磨砂玻璃、角色立绘和粒子动效。切换器在右上角，随时换，也能一键还原回原生界面。
 
-<table>
-<tr>
-<td align="center"><b>古河渚</b><br><sub>花瓣飘落</sub></td>
-<td align="center"><b>藤林杏</b><br><sub>雨滴</sub></td>
-<td align="center"><b>藤林椋</b><br><sub>光点浮动</sub></td>
-</tr>
-<tr>
-<td align="center"><b>坂上智代</b><br><sub>雪花</sub></td>
-<td align="center"><b>伊吹风子</b><br><sub>光玉</sub></td>
-<td align="center"><b>樱花坡道</b><br><sub>花瓣飘落</sub></td>
-</tr>
-</table>
+> **在线预览**：[`docs/gallery.html`](docs/gallery.html) —— 左右切换，可看每个主题的真实效果（壁纸、磨砂玻璃、立绘、粒子）。
 
 ---
 
