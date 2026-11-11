@@ -8,7 +8,7 @@ WorkBuddy Clannad 皮肤自愈守护进程 (stdlib only, 完全独立于 WorkBud
   - 若皮肤缺失(刚重启/被清理), 自动重新注入 clannad-theme-console.js
   - 因此 WorkBuddy 无论怎么重启, 皮肤都会自己回来
 
-日志: C:\Users\HP\.workbuddy\skin-watchdog.log
+日志: <WBX_ROOT>/skin-watchdog.log（默认 ~/.workbuddy/skin-watchdog.log）
 """
 import os
 import sys
@@ -16,8 +16,9 @@ import time
 import socket
 import subprocess
 
-ROOT = r"C:\Users\HP\.workbuddy"
-SKILL_DIR = os.path.join(ROOT, "skills", "clannad-theme-v10")
+# 路径自动探测，可用 WBX_ROOT / WBX_SKILL_DIR 覆盖（无需改代码）
+ROOT = os.environ.get("WBX_ROOT") or os.path.join(os.path.expanduser("~"), ".workbuddy")
+SKILL_DIR = os.environ.get("WBX_SKILL_DIR") or os.path.join(ROOT, "skills", "clannad-theme-v10")
 SKIN = os.path.join(SKILL_DIR, "clannad-theme-console.js")
 
 # 注入前的硬清理：按 id(wbx-theme-style) + data-wbx 属性 + 内容签名(wbx-ambient/#wbx-switcher) 移除所有皮肤残留，

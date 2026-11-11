@@ -5,3 +5,12 @@
 # 临时输出
 output/
 *.tmp
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 系统文件
+Thumbs.db
+desktop.ini
+.DS_Store

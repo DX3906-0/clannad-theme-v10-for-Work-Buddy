@@ -1,186 +1,132 @@
-# Clannad 主题 v10 for WorkBuddy
+# Clannad Theme for WorkBuddy
 
-WorkBuddy 客户端皮肤：**6 个 Clannad 角色主题**，每个含专属壁纸 + 玻璃拟态 + 角色立绘 + 粒子动效。
+![Clannad](https://img.shields.io/badge/theme-Clannad-ff9ec4) ![platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![python](https://img.shields.io/badge/python-3.8%2B%20stdlib-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
-## 主题列表
+把 WorkBuddy 变成《CLANNAD》的坂道。
 
-| 主题 | 粒子动效 |
-|---|---|
-| 古河渚 | 花瓣飘落 🌸 |
-| 藤林杏 | 雨滴 ☔ |
-| 藤林椋 | 光点浮动 ✨ |
-| 坂上智代 | 雪花 ❄️ |
-| 伊吹风子 | 光玉 🔮（当前精修主力，海星/海洋意象） |
-| 樱花坡道 | 花瓣飘落 🌺 |
+6 个角色主题，每个都有自己的壁纸、磨砂玻璃、角色立绘和粒子动效。切换器在右上角，随时换，也能一键还原回原生界面。
 
-右上角有主题切换器，支持切换与一键还原原主题；还原状态持久化（watchdog 不会覆盖）。
+<table>
+<tr>
+<td align="center"><b>古河渚</b><br><sub>花瓣飘落</sub></td>
+<td align="center"><b>藤林杏</b><br><sub>雨滴</sub></td>
+<td align="center"><b>藤林椋</b><br><sub>光点浮动</sub></td>
+</tr>
+<tr>
+<td align="center"><b>坂上智代</b><br><sub>雪花</sub></td>
+<td align="center"><b>伊吹风子</b><br><sub>光玉</sub></td>
+<td align="center"><b>樱花坡道</b><br><sub>花瓣飘落</sub></td>
+</tr>
+</table>
 
-## 文件
+---
 
-| 文件 | 说明 |
-|---|---|
-| `clannad-theme-console.js` | 主皮肤脚本（约 6.7MB，内含 base64 壁纸/立绘），注入 WorkBuddy 主窗生效 |
-| `SKILL.md` | WorkBuddy Skill 描述文件 |
-| `runtime/wb-skin-watchdog.py` | 自动注入守护：每 6s 轮询 CDP 端口，皮肤缺失则重注；带单例锁，只注入主窗 |
-| `runtime/start-wb-with-skin.py` | 桌面快捷方式 `WorkBuddy.lnk` 的启动器：启动 WorkBuddy 并注入皮肤 |
-| `runtime/ClannadSkin.vbs` | 开机自启入口（`Startup` 文件夹），无窗口调 pythonw 跑 watchdog |
+## 怎么用
 
-> `runtime/` 下的文件是副本；**实际生效位置**：`~/.workbuddy/`（watchdog）、
-> `~/.workbuddy/scripts/`（启动器）、`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`（自启）。
-> 修改时先改仓库内版本再同步过去，保持两边一致。
+需要 Windows + WorkBuddy 桌面客户端，Python 3（只用标准库，装了 pip 之外什么都不用）。
 
-## 使用说明
+因为主题是通过 CDP 注入到 Electron 渲染进程的，所以第一步得让客户端**开启远程调试**，这一步不做后面都无从谈起。不会的话可以让 AI 帮你改启动参数。
 
-### 前置条件
-
-- Windows + WorkBuddy 桌面客户端（Electron），且客户端**开启了远程调试**（CDP，实在不会让ai帮你开）。
-  皮肤通过 CDP（Chrome DevTools Protocol）注入，端口随机，由 `~/.workbuddy/app/session/DevToolsActivePort` 文件记录。
-- Python 3（仅标准库即可，无需第三方依赖）。
-
-### 方式 A：自动注入（推荐）
-
-1. 确认 `runtime/` 三个脚本中的路径常量与你的环境一致
-   （`start-wb-with-skin.py` 顶部硬编码了 `ROOT`、`WB_EXE`、`PYTHON` 等，按需修改）。
-2. 把 `clannad-theme-console.js` 与脚本放到 `~/.workbuddy/skills/clannad-theme-v10/`
-   （或改常量指向你自己的目录），`wb-cdp.py` 需存在于 `~/.workbuddy/`。
-3. 二选一启动：
-   - **随 WorkBuddy 启动**：运行 `runtime/start-wb-with-skin.py`（可建快捷方式），它会拉起 WorkBuddy、等 CDP 就绪后注入，并守护扫描新开的 iframe 页（资料库/专家/自动化等懒创建页面也能覆盖）。
-   - **开机常驻自愈**：把 `runtime/ClannadSkin.vbs` 放进 `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`，watchdog 每 6s 轮询，皮肤丢失/WorkBuddy 重启都会自动重注。
-
-### 方式 B：手动注入（临时体验）
-
-WorkBuddy 启动后，读取端口文件第一行得到 CDP 端口，把 `clannad-theme-console.js` 全文作为表达式在主窗口执行即可：
-
-```python
-# 依赖 wb-cdp.py（仓库外的 ~/.workbuddy/ 下），或自行用 websocket 调 CDP
-import os, importlib.util
-os.environ['CDP_PORT'] = '<端口>'
-spec = importlib.util.spec_from_file_location('wb_cdp', '<路径>/wb-cdp.py')
-wb_cdp = importlib.util.module_from_spec(spec); spec.loader.exec_module(wb_cdp)
-ws, t = wb_cdp.connect('<主窗口targetId>')
-wb_cdp.evaluate(ws, open('clannad-theme-console.js', encoding='utf-8').read())
-```
-
-> 也可在 WorkBuddy 内用任何能执行 JS 的入口直接粘贴脚本全文运行。
-
-### 日常使用
-
-- 注入成功后**右上角有主题切换器**：6 个角色主题随时切换，也可一键还原为 WorkBuddy 原生主题；选择持久化在 `localStorage`（重启/重注入后保持）。
-- 还原后再想启用：重新注入脚本即可（watchdog 会自动清残留再注）。
-- 日志：watchdog 写 `~/.workbuddy/skin-watchdog.log`，启动器写 `~/.workbuddy/scripts/inject.log`。
-
-## 壁纸与素材（assets/）
-
-主脚本为单文件设计（base64 内嵌、便于 CDP 直接注入），`assets/` 是从中提取出的独立素材，供浏览与单独取用：
-
-```
-assets/
-├── wallpapers/            # 6 张角色主题壁纸 + 默认壁纸（1536×942）
-│   ├── nagisa.jpg  kyou.jpg  ryou.jpg
-│   ├── tomoyo.jpg  fuko.jpg  sakura-petals.jpg
-│   └── default-wallpaper.png
-├── portraits/             # 6 张角色立绘（600×900 透明 PNG）
-│   └── nagisa.png  kyou.png  ryou.png  tomoyo.png  fuko.png  sakura-petals.png
-└── fx/
-    └── particle-orb.png   # 粒子光斑贴图（256×256）
-```
-
-> 改动主题时**不需要**动 `assets/`——运行时读的是 JS 内嵌版本；`assets/` 仅作为独立素材仓库。
-
-## 关键架构（防回归备忘）
-
-- **产物面板（.detail-panel）整树禁磨砂**（10/3「产物栏被蒙模糊层」根因）：
-  应用新版把 `cr-*` 类名同时用于对话区和产物面板（cr-text-block=正文块、
-  cr-tool-exp__content=写作内容、sc-editor-content-overlay=编辑器内容层、
-  sc-code-block-wrap=代码块），主题三条对话区玻璃规则 + tame 弹层词根分支 +
-  frostWhites 去白引擎**三处全部误伤**，把文档预览糊成毛玻璃。
-  修法：① 气泡/代码块/工具内容 CSS 规则一律 `:not(.detail-panel *)`；
-  ② tame 弹层分支对 .detail-panel 后代 isOverlay 强制 false（放行 strip 清 blur）；
-  ③ frostWhites 循环对 .detail-panel 后代直接 continue。
-  原则：**预览/编辑器类面板 = 文档正文 = 原生干净**，任何磨砂都是错的。
-  ⚠️ 已中毒元素带 tamed/frost 标记会被引擎短路挡住自动清理，修完代码必须
-  手动清一遍面板内 inline + 标记。
-
-- **整窗壳去蒙层必须语义兜底**（9/25「版本更新后只剩侧栏立绘」根因）：
-  应用更新把主壳改成 css-modules hash 类名（`_gridView_7xbcw_9`）+ `teams-*` 新结构，
-  `clearShellVeil` 的**类名名单**全部落空 → 不透明白底盖死 z=-1 的壁纸/玻璃层，
-  只剩层级较高的侧栏立绘。修法两层：① 名单补新类（含 `[class*="_gridView_"]` 属性匹配）；
-  ② **语义兜底（治本）**——凡「包含侧栏/阅读列的祖先壳 + 面积 ≥50% 视口 + 接近不透明
-  （rgb 全算、rgba 需 alpha≥0.85，半透明面板底不许清）」一律去蒙层。应用今后改类名，
-  只要结构仍是「壳包侧栏+阅读列」就自动兜住，无需再修。
-
-- **「还原默认」后守护不得再注入**（9/21「切回原皮肤又被自动注入」根因）：
-  用户点 ↺ 后 `restore()` 写 `localStorage wbx-theme-state.active=false`，
-  **所有注入方都必须尊重它**：① `loadState()` 主窗模式读到 `active:false` 保持原生
-  （旧版曾无条件强制回 `active:true`——正是重注帮凶）；② 注入脚本（`start-wb-with-skin.py`）
-  sweep 前先 `read_user_intent()` 读意愿，显式 false 则主窗跳过、iframe 走同步还原分支，
-  **绝不允许**在注入路径里把 `active` 改回 true；③ 唯一允许重置激活的时机 =
-  双击桌面快捷方式（`inject_theme()` 开头 `activate_intent()`，这个动作本身就是
-  「我要用皮肤」）或点切换器选主题。自愈守护 `wb-skin-watchdog.py` 已内置同款尊重逻辑
-  （`SKIP inject (user restored default)`）。
-- **长会话卡顿三防线**（9/21「会话内容多时很卡」根因 = 流式输出每 token 触发全量扫描）：
-  ① `frostMo` 观察器**过滤对话区变更**——mutation 全在 `.conversation-shell` 内不调度
-  `frostWhites`（路由/弹层都在 shell 外，不受影响），对话区磨砂由 3s `frostTimer` 兜底；
-  ② `frostWhites` 对已磨砂且 inline 底色仍在的元素短路（`data-wbx-frost=1` 且
-  `style.backgroundColor` 非空即 continue，inline 被清则自动走全流程重写，保留跨代际重喂能力）；
-  ③ `tameFullscreenBlur` 两遍式（先纯读收集动作、再统一写，消除读写交错强制重排）+
-  `data-wbx-tamed` 且 inline blur 仍在的元素短路（大容器剥 blur 也打同一标记）。
-  另：`syncGlass` 有几何缓存（布局没变不写样式、不重绘），`clearMaskOverreach` 从
-  1s tick 移到 3s 兜底（实时防护由 `installMaskGuard` 同帧 MutationObserver 覆盖）。
-  改这些引擎时**不得删掉短路/过滤**，否则长会话帧率立刻回退。
-- **玻璃层 `#wbx-glass`**：预模糊壁纸 JPEG + 42% 白纱，`syncGlass()` 每秒写几何（带缓存）。
-  CSS 自带**四边羽化（左右 40px / 上下 30px）+ 24px 圆角**——JS 里**不要覆盖 mask**（保持 `''` 回落 CSS）。
-- **frostable 引擎**：扫白底容器写 55% 主题色。必须排除侧栏**及其祖先**（`_gridViewItem` 包着侧栏，
-  `closest()` 查不到祖先链下方的排除目标，需要 `querySelector()` 反查）。
-- **多引擎多 tick 竞态**：`tameFullscreenBlur` / `unfrostAll` 会 `removeProperty` 清掉 inline，
-  所以蒙层清除（`clearShellVeil`）必须**每 tick 校验补回**，不能"只处理一次"。
-- **弹层容器必须保留 backdrop-filter**：`tameFullscreenBlur` 会给超视口 50% 的大容器剥 blur，
-  但 modal/overlay/dialog/drawer/popover 词根的**弹层**覆盖在内容之上，blur 就是可读性来源——
-  被剥后只剩 33% 磨砂底，底下文字穿透混叠（9/12「添加模型弹窗全透明」根因）。
-  tame 已对这类词根显式写回 `blur(14px)`（后写者赢，同时覆盖历史 inline none 残留）；
-  例外：`.user-menu-popover` 走专属 blur(20px) 逻辑。
-- **遮罩词根规则** `[class*="wrap"]` 会误伤内容容器（应用改类名即回归），
-  由 `clearMaskOverreach()` 语义兜底：真遮罩 = fixed 或面积 ≥35% 视口。
-- **内联 iframe 绝不能注入主题**（「AI 输出的流程图被渲染成壁纸」根因，9/17）：
-  智能体 widget（流程图/图表）渲染在 `about:srcdoc` 沙箱 iframe 里。
-  注入后 `#wbx-glass` 会把壁纸铺进卡片内部，切页 / 等十余秒被守护重注后复发。
-  两道防线缺一不可：
-  1. 主题源码环境守卫 = **协议白名单**：iframe 内必须同时满足 `http(s)` **且** `__WBX_EMBED__`；
-     `about:srcdoc` / `about:blank` / `blob:` / `data:` 一律只清理不布置。
-  2. 注入脚本（`runtime/start-wb-with-skin.py`）判定 `is_remote_page(url)`，
-     仅 http(s) 才置位 `__WBX_EMBED__`；内联 iframe 走 `purge_inline_iframe()` 只清残留。
-     历史上曾把「所有 iframe」都当远程网页（日志里 113 次 `about:srcdoc` 注入即此 bug）。
-- **后台任务条会盖住排队消息条**（「引导会话」被压在底层、⧉✎🗑 点不动，9/18）：
-  这是**应用原生**行为（还原主题后实测同样被盖）。成因是层叠上下文的先天劣势：
-  「N 个后台任务运行中」条 `.conversation-input-area > div[class^="_wrapper_"]` 是
-  `__input-stack` 的兄弟、`z-index:15`；排队条却挂在 `__prompt-queue-overlay`
-  （`position:absolute; z-index:auto`）内部 —— 覆层自成一个层叠上下文，**排队条自身
-  的 z-index 抬多高都没用**（实测 16 无效）。修法是**避让**而非抬升：
-  任务条存在时把整条排队覆层上移一个任务条高度（`translateY(-48px)`），两条紧邻不重叠。
-  用 `transform` 而非 `top` —— 应用按排队条高度自己算 `top:-100px`，改 `top` 会打架。
-  位移量 = `input-stack.top - input-area.top`（有任务条 48 / 无则 0），因此**不需要识别
-  带 hash 的 `_wrapper_p87zk_1`**，构建改名也不失效；CSS 规则由 `[data-wbx-lift="1"]`
-  门控（JS 置位），属性缺失时规则不匹配 = 优雅退化回原生表现。
-- **成长伙伴（小宠物）压在排队条按钮上**（9/18）：`.conversation-input__growth-buddy`
-  外层虽是 `pointer-events:none`，但内部有个 ~70×70 的隐形热区（`pointer-events:auto`）
-  把命中测试抢走，正好盖住排队条的三个 icon-btn。修法：任务条 / 排队条出现时用
-  `:has()` 条件隐藏宠物（JS `tameGrowthBuddy()` 兜底）。
-- **`restore()` 必须清 tame 写过的 inline**：tame 给弹层容器写过 inline bg/blur，
-  不在 `[data-wbx-frost]` 体系里，`unfrostAll()` 清不到 → 还原后残留（实测
-  `__prompt-queue-overlay` 还原后仍带 `blur(14px)`）。tame 写入处打 `data-wbx-tamed="1"`，
-  `restore()` 按标记清 bg/blur/阴影，并一并清 `data-wbx-lift` / `--wbx-queue-lift`。
-- **stylesheet `!important` 打不过 `@layer` 内 important**，也打不过每帧 inline 重写；
-  稳定修改只能进主题源码（inline `!important`）。
-- 排除主题自身图层要用 `id` 前缀 `wbx-` 判断，**不能用** `closest('[class*="wbx"]')`（body 会全命中）。
-
-## 版本
-
-- `v10-20260911-fixed`：9/11 全部修复完成版（玻璃层今早版式 + 矩形框兜底 + 蒙层清除）。
-
-## 恢复方法
+### 三步上手
 
 ```bash
-cd ~/.workbuddy/skills/clannad-theme-v10
-git checkout v10-20260911-fixed -- clannad-theme-console.js   # 回退主题文件
-# 然后用 wb-cdp.py 重新注入，或等 watchdog 自动重注
+# 1. 克隆到 WorkBuddy 的技能目录
+git clone <repo-url> ~/.workbuddy/skills/clannad-theme-v10
+
+# 2. 把 CDP 客户端放到用户目录（注入脚本依赖它）
+cp ~/.workbuddy/skills/clannad-theme-v10/runtime/wb-cdp.py ~/.workbuddy/
+
+# 3. 注入
+python ~/.workbuddy/skills/clannad-theme-v10/runtime/wb-cdp.py \
+       inject-all ~/.workbuddy/skills/clannad-theme-v10/clannad-theme-console.js
 ```
+
+右上角出现切换器，就成了。
+
+> 路径不用手动改。三个脚本都会自己推导 `~/.workbuddy`，也支持 `WBX_ROOT` 等环境变量覆盖，装在别处也能跑。
+
+### 让它一直生效
+
+手动注入只在当前会话有效，客户端一重启就没了。想长期保持，二选一：
+
+**开机常驻自愈（推荐）** —— 把 `runtime/ClannadSkin.vbs` 复制到启动文件夹：
+
+```
+%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\
+```
+
+守护进程每 15 秒看一眼，皮肤丢了自动补回来，不管是重启客户端还是切页面。
+
+**跟随客户端启动** —— 把 `runtime/start-wb-with-skin.py` 做成快捷方式，以后从这里启动 WorkBuddy，它会等 CDP 就绪后注入。
+
+### 日常
+
+- 右上角切换器：6 个主题随时切，↺ 一键还原原生
+- 选择会记住（存 `localStorage`），重启后还是你上次选的那个
+- 还原之后它就真的不动了 —— 守护不会强行注回来。想再开，重新选个主题就行
+- 日志：守护写 `~/.workbuddy/skin-watchdog.log`，启动器写 `~/.workbuddy/scripts/inject.log`
+
+### 出问题了
+
+**切换器没出现** → CDP 没连上。确认端口文件 `~/.workbuddy/app/session/DevToolsActivePort` 存在，第一行就是当前端口。客户端没开远程调试的话不会有这个文件。
+
+**皮肤过一会儿自己消失** → 守护没在跑，或者注入被页面导航清掉了。检查 watchdog 日志。
+
+**想彻底干净地还原** → 点 ↺ 即可。如果还有残留，`window.__wbxRestore()` 兜底。
+
+---
+
+## 文件都在哪
+
+```
+clannad-theme-console.js     主脚本，单文件（壁纸/立绘全部 base64 内嵌，方便直接注入）
+SKILL.md                     WorkBuddy Skill 描述
+runtime/
+  ├── wb-cdp.py              零依赖 CDP 客户端（stdlib only）
+  ├── wb-skin-watchdog.py    自愈守护，单例锁，轮询端口
+  ├── start-wb-with-skin.py  启动器：拉起客户端 → 等 CDP → 注入
+  ├── ClannadSkin.vbs        开机自启入口（无窗口）
+  └── restart-inject-guard.vbs  改了守护代码后用它重启
+assets/                      从主脚本里提取出的原始素材，仅供取用
+docs/ARCHITECTURE.md         实现机制 + 踩坑记录
+```
+
+`runtime/` 里是副本，实际生效的位置在 `~/.workbuddy/`。改完记得同步过去（两边我都保持一致的）。
+
+主脚本单文件 6.5MB，因为壁纸和立绘全都 base64 内嵌 —— 这样 CDP 注入一条命令就够了，不用管资源加载顺序。想单独拿素材的话看 `assets/`，那里是提取好的原图。
+
+---
+
+## 改代码之前
+
+主题逻辑比看上去绕：三个引擎在不同 tick 上跑，会互相覆盖对方写的 inline 样式；应用本身还在持续改类名和 DOM 结构，每版更新都可能让某条规则失效。
+
+**`docs/ARCHITECTURE.md` 里记了所有踩过的坑**，包括：
+
+- 为什么产物面板必须整树禁磨砂
+- 为什么壁纸层的 `z-index:-1` 会被一个改名的祖先壳盖死
+- 为什么流式输出会让长会话卡死，以及不能删的那三处性能短路
+- 哪些现象其实是应用原生问题，主题改不了只能绕
+
+改之前花十分钟读一遍，能省掉不少来回。
+
+---
+
+## 已知限制
+
+- **只支持 Windows**。脚本用了 VBS 和 Windows 路径约定，macOS 要自己改
+- **客户端更新可能打破主题**。WorkBuddy 改 DOM 结构或类名时，某些规则会失效。主题对主要容器做了语义兜底（按尺寸和不透明度判断，不认类名），但不是万能的
+- **和原生功能有轻微打架**。后台任务条会压住排队消息条、小宠物会挡按钮 —— 这些都是客户端自己的层叠问题，主题只能靠位移避让绕过去
+- **注入依赖 CDP**。如果哪天客户端关掉了远程调试，主题就注不进去了
+
+---
+
+## 素材来源
+
+壁纸与角色立绘版权归 © Visual Arts / Key 所有，仅用于个人学习与美化，请勿商用。
+
+---
+
+## License
+
+MIT

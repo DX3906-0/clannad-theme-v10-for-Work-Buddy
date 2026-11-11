@@ -7,12 +7,50 @@ import time
 import json
 import urllib.request
 
-ROOT = r'C:\Users\HP\.workbuddy'
-PYTHON = os.path.join(ROOT, 'binaries', 'python', 'versions', '3.13.12', 'python.exe')
+# ---------------------------------------------------------------- 路径配置
+# 全部自动探测，无需改代码即可在其他机器上跑。任一变量都可用环境变量覆盖：
+#   WBX_ROOT        WorkBuddy 用户数据目录（默认为 ~/.workbuddy）
+#   WBX_THEME       主题脚本路径（默认 WBX_ROOT/skills/clannad-theme-v10/clannad-theme-console.js）
+#   WBX_WB_EXE      WorkBuddy 主程序路径（默认自动在 LOCALAPPDATA 下查找）
+#   WBX_PYTHON      pythonw/python 解释器（默认当前解释器）
+ROOT = os.environ.get('WBX_ROOT') or os.path.join(os.path.expanduser('~'), '.workbuddy')
+
+
+def _find_python():
+    """优先环境变量，其次 WorkBuddy 自带的 python，最后回落当前解释器。"""
+    if os.environ.get('WBX_PYTHON'):
+        return os.environ['WBX_PYTHON']
+    base = os.path.join(ROOT, 'binaries', 'python', 'versions')
+    if os.path.isdir(base):
+        for ver in sorted(os.listdir(base), reverse=True):
+            for exe in ('pythonw.exe', 'python.exe'):
+                p = os.path.join(base, ver, exe)
+                if os.path.exists(p):
+                    return p
+    return sys.executable
+
+
+def _find_wb_exe():
+    """在常见安装位置查找 WorkBuddy.exe。"""
+    if os.environ.get('WBX_WB_EXE'):
+        return os.environ['WBX_WB_EXE']
+    local = os.environ.get('LOCALAPPDATA', '')
+    for cand in (
+        os.path.join(local, 'Programs', 'WorkBuddy', 'WorkBuddy.exe'),
+        r'C:\Program Files\WorkBuddy\WorkBuddy.exe',
+        r'C:\Program Files (x86)\WorkBuddy\WorkBuddy.exe',
+    ):
+        if cand and os.path.exists(cand):
+            return cand
+    return os.path.join(local, 'Programs', 'WorkBuddy', 'WorkBuddy.exe')
+
+
+PYTHON = _find_python()
 CDP_SCRIPT = os.path.join(ROOT, 'wb-cdp.py')
-THEME_FILE = os.path.join(ROOT, 'skills', 'clannad-theme-v10', 'clannad-theme-console.js')
+THEME_FILE = os.environ.get('WBX_THEME') or os.path.join(
+    ROOT, 'skills', 'clannad-theme-v10', 'clannad-theme-console.js')
 PORT_FILE = os.path.join(ROOT, 'app', 'session', 'DevToolsActivePort')
-WB_EXE = r'C:\Users\HP\AppData\Local\Programs\WorkBuddy\WorkBuddy.exe'
+WB_EXE = _find_wb_exe()
 LOG_FILE = os.path.join(ROOT, 'scripts', 'inject.log')
 
 # 把 print 重定向到日志文件：pythonw 运行环境无控制台，直接 print 会抛
