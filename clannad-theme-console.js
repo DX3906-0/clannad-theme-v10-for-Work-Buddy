@@ -637,6 +637,11 @@
     + '#wbx-switcher .wbx-theme.is-active .name { color: var(--wbx-accent,#d96a92); }'
     + '#wbx-switcher .wbx-restore { width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(120,120,120,.3); background: rgba(245,245,247,.85); color: #6b6b73; cursor: pointer; font-size: 15px; display: grid; place-items: center; margin-left: auto; transition: background .18s; }'
     + '#wbx-switcher .wbx-restore:hover { background: #ececef; }'
+    + '#wbx-switcher .wbx-rotate { display: flex; gap: 6px; padding-top: 2px; border-top: 1px solid rgba(255,255,255,.55); }'
+    + '#wbx-switcher .wbx-rot-btn { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 0; border-radius: 999px; background: rgba(255,255,255,.62); color: var(--wbx-text,#5c3550); font-size: 13px; cursor: pointer; transition: background .18s, color .18s, box-shadow .18s; }'
+    + '#wbx-switcher .wbx-rot-btn .name { font-weight: 600; letter-spacing: .03em; }'
+    + '#wbx-switcher .wbx-rot-btn:hover { background: rgba(255,255,255,.92); }'
+    + '#wbx-switcher .wbx-rot-btn.is-active { background: var(--wbx-accent,#d96a92); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--wbx-accent,#d96a92) 40%, transparent); }'
     + '#wbx-switcher .wbx-launcher { width: 46px; height: 46px; border-radius: 50%; border: 0; cursor: pointer; font-size: 20px; display: grid; place-items: center; color: #fff; background: radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--wbx-accent,#d96a92) 70%, #fff) 0%, var(--wbx-accent,#d96a92) 72%); box-shadow: 0 4px 14px rgba(0,0,0,.18); animation: wbx-glow 3.6s ease-in-out infinite; transition: transform .18s ease; }'
     + '#wbx-switcher .wbx-launcher:hover { transform: scale(1.07); }'
     // 各主题角色个人图：嵌入左侧侧边栏、压在文字下层(z-index:0)、mini 尺寸、清晰不模糊、柔边融入，pointer-events:none 不挡字
@@ -1531,19 +1536,78 @@
       Object.keys(WBX.themes).forEach(function (k) {
         html += '<button type="button" class="wbx-theme" data-wbx="' + k + '"><span class="dot">' + WBX.themes[k].icon + '</span><span class="name">' + WBX.themes[k].label + '</span></button>';
       });
-      html += '<button type="button" class="wbx-restore" title="还原默认主题">↺</button>';
-      html += '</div>';
+        html += '<button type="button" class="wbx-restore" title="还原默认主题">↺</button>';
+        html += '<div class="wbx-rotate" role="group" aria-label="乱序轮播">'
+             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="30" title="每 30 分钟随机切换">🎲<span class="name">30分钟</span></button>'
+             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="45" title="每 45 分钟随机切换">🎲<span class="name">45分钟</span></button>'
+             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="0" title="关闭轮播">⏸<span class="name">关闭</span></button>'
+             +  '</div>';
+        html += '</div>';
       bar.innerHTML = html;
       document.body.appendChild(bar);
       bar.addEventListener('click', function (e) {
         var btn = e.target.closest('button');
         if (!btn) return;
         if (btn.classList.contains('wbx-launcher')) { bar.classList.toggle('wbx-collapsed'); return; }
-        if (btn.classList.contains('wbx-theme')) { applyTheme(btn.getAttribute('data-wbx')); return; }
-        if (btn.classList.contains('wbx-restore')) { restore(); }
+        if (btn.classList.contains('wbx-theme')) { stopRotate(); applyTheme(btn.getAttribute('data-wbx')); return; }
+        if (btn.classList.contains('wbx-restore')) { restore(); return; }
+        if (btn.classList.contains('wbx-rot-btn')) { setRotate(parseInt(btn.getAttribute('data-wbx-rot'), 10)); }
       });
     }
     state.bar = bar;
+
+    /* ---- 乱序轮播 ----
+       ─ 打乱主题顺序后按固定间隔切换，切完一轮再重新洗牌，避免短时间内来回重复；
+       ─ 用户手动点主题即停（避免与自己的选择打架），点「关闭」即停；
+       ─ 时长 0 = 关闭。仅主窗启用，嵌入模式不跑（iframe 频繁切换会拖慢宿主）。 */
+    var ROT_KEY = 'wbx-rotate';
+    var rotTimer = null;
+    var rotQueue = [];
+    var rotMs = 0;
+
+    function nextRotating() {
+      var keys = Object.keys(WBX.themes);
+      var last = document.body.getAttribute('data-wbx-last');
+      if (rotQueue.length === 0) {
+        rotQueue = keys.slice();
+        // Fisher-Yates 洗牌
+        for (var i = rotQueue.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var tmp = rotQueue[i]; rotQueue[i] = rotQueue[j]; rotQueue[j] = tmp;
+        }
+        // 洗完后若队首正好是当前主题，与队尾交换，保证不连续重复
+        if (rotQueue.length > 1 && rotQueue[0] === last) {
+          var back = rotQueue.pop(); rotQueue.unshift(back);
+        }
+      }
+      return rotQueue.shift();
+    }
+
+    function paintRotateBtns() {
+      if (!bar) return;
+      Array.prototype.forEach.call(bar.querySelectorAll('.wbx-rot-btn'), function (b) {
+        var on = rotMs > 0 && parseInt(b.getAttribute('data-wbx-rot'), 10) * 60000 === rotMs;
+        b.classList.toggle('is-active', on);
+      });
+    }
+
+    function setRotate(minutes) {
+      if (rotTimer) { clearInterval(rotTimer); rotTimer = null; }
+      rotMs = minutes > 0 ? minutes * 60000 : 0;
+      rotQueue = [];
+      paintRotateBtns();
+      try { localStorage.setItem(ROT_KEY, String(minutes)); } catch (e) {}
+      if (rotMs > 0) {
+        rotTimer = setInterval(function () { applyTheme(nextRotating()); }, rotMs);
+      }
+    }
+    function stopRotate() { setRotate(0); }
+
+    if (!EMBED && bar) {
+      var savedMin = 0;
+      try { savedMin = parseInt(localStorage.getItem(ROT_KEY) || '0', 10) || 0; } catch (e) {}
+      if (savedMin > 0) setRotate(savedMin);
+    }
 
     if (EMBED) {
       // 嵌入模式（远程网页 iframe）：宿主页与 iframe 不同源，localStorage 互不相通，
@@ -1624,6 +1688,7 @@
 
   // 恢复原主题：只停用皮肤效果，切换器面板保留，随时可再切回来
   function restore() {
+    stopRotate();
     clearFx();
     if (state.ambient) { state.ambient.remove(); state.ambient = null; }
     var gl = document.getElementById('wbx-glass');
