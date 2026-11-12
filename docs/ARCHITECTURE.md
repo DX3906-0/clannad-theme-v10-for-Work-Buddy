@@ -11,11 +11,13 @@
 ```
 applyTheme(key)
 ├── 建图层   #wbx-ambient(壁纸) #wbx-glass(磨砂玻璃) #wbx-fx(粒子) #wbx-motifs(立绘)
-├── 建切换器 #wbx-switcher(右上角浮层，6 主题 + 还原按钮)
+├── 建切换器 #wbx-switcher(右上角浮层，6 主题 + 还原 + 乱序轮播)
 ├── 玻璃层   buildBlurWall() 用 canvas 预模糊壁纸 → base64 → #wbx-glass 背景
-└── 引擎循环 setInterval 1s  ⇒ syncGlass / syncMotifHost / 宠物避让 / 排队避让
-                 setInterval 3s  ⇒ frostWhites / clearMaskOverreach
+└── 引擎循环 setInterval 1s  ⇒ syncGlass(仅脏时) / syncMotifHost / 宠物避让 / 排队避让
+                 setInterval 5s  ⇒ frostWhites / clearMaskOverreach
 ```
+
+轮播是独立的一条线，不参与渲染引擎：`setRotate(minutes)` 起一个 `setInterval` 到点调 `applyTheme(nextRotating())`。顺序由 Fisher-Yates 洗牌生成队列，队首恰为当前主题则与队尾交换（保证不连续重复）。**手动点主题、点 ↺ 都会 `stopRotate()`** —— 用户刚选好就被换走是很烦的事。分钟数存 `wbx-rotate`，自定义值同样持久化。
 
 三个引擎各管一摊：
 
@@ -81,13 +83,53 @@ applyTheme(key)
 
 ### 长会话性能
 
-根因是**流式输出每个 token 都触发全量扫描**：`querySelectorAll('*')` + 逐元素 `getComputedStyle` + `getBoundingClientRect`，长会话数千节点直接卡死。三道防线：
+根因是**流式输出每个 token 都触发全量扫描**：`querySelectorAll('*')` + 逐元素 `getComputedStyle` + `getBoundingClientRect`，长会话数千节点直接卡死。防线分两层。
 
-1. `frostMo` **过滤对话区变更** —— mutation 全在 `.conversation-shell` 内就不调度，交给 3s `frostTimer` 兜底（路由切换、弹层挂载都在 shell 外，不受影响）
-2. `frostWhites` 对已处理且 inline 仍在的元素**短路**（inline 被清则自动重走全流程）
-3. `tameFullscreenBlur` **两遍式**（先纯读收集动作、再统一写），消除读写交错强制重排
+**第一层：不要全量扫**
 
-> 改这些引擎时**不得删掉短路和过滤**，删了帧率立刻回退。
+`frostMo` 过滤对话区变更 —— mutation 全在 `.conversation-shell` 内就不调度，交给兜底轮覆盖（路由切换、弹层挂载都在 shell 外，不受影响）。
+
+**第二层：扫的时候也别扫全部**
+
+| 位置 | 改前 | 改后 | 依据 |
+|---|---|---|---|
+| `frostWhites` 候选 | `querySelectorAll('*')` 1136 个，**76ms/轮** | 块级标签白名单 336 个，**6.1ms/轮** | `isNeutralLight` 只认不透明 `rgb()` 且 `r>=235`，能命中的必然是有布局的块级容器，`span/a/i` 不可能是不透明壳 |
+| `clearMaskOverreach` | 21 个候选却 **162ms** | 已打 `data-wbx-maskoff` 的跳过 rect | rect 会强制布局重算，"候选少但很慢"的典型陷阱 |
+| `syncGlass` 几何 | 每秒无条件测量 | `glassDirty` 脏标记按需测量 | ResizeObserver + window.resize 已覆盖，每秒重测纯冗余 |
+
+另外三条：
+
+1. `syncGlass` 对几何未变的元素**短路**，但缓存键必须含 `blurUrl` 版本（见上方玻璃层同步）
+2. `tameFullscreenBlur` **两遍式**（先纯读收集动作、再统一写），消除读写交错强制重排
+3. `frostWhites` 走 `requestIdleCallback`（timeout 兜底）—— 早 100ms 晚 100ms 用户看不出来，撞在渲染帧上就是掉帧
+
+加压实测（约 7500 节点模拟长会话）：
+
+| 指标 | 改前 | 改后 |
+|---|---|---|
+| 最差单帧 | 212ms | 97ms |
+| p99 帧长 | 42.5ms | 18.3ms |
+| 长任务 | 9 个 | 2 个 |
+
+正常会话稳态：144 FPS / p50 6.1ms / p99 12.2ms / 零长任务。
+
+> 改这些引擎时**不得删掉短路、过滤和预筛**，删了帧率立刻回退。加新的预筛条件时先想清楚"被筛掉的元素里有没有可能该命中的"，`isNeutralLight` 的判定范围就是安全边界。
+
+### 资源体积
+
+壁纸和立绘以 base64 内嵌在 JS 里，所以体积**全在图片**（6.28MB / 6.43MB，代码只占 0.16MB）。
+
+压缩前必须**逐个检查 alpha 通道实际使用率**，不能按格式一刀切：
+
+```python
+img.convert('RGBA').split()[-1].getextrema()   # (amin, amax)
+```
+
+- 纯不透明（`amin == 255`）却存成 PNG → 转 JPEG q88，某张 1536×1024 的壁纸 **2024KB → 256KB**
+- 真用透明（立绘有 70~83% 透明像素）→ 必须保留 PNG，转 JPEG 会在边缘出白底
+- 已经是 JPEG 的高质量图重新编码收益接近 0（甚至变大），不要碰
+
+这一轮把 6.77MB 压到 4.35MB（-35.8%）。
 
 ### iframe
 
