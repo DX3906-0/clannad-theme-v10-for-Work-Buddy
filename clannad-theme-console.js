@@ -675,6 +675,27 @@
   var GEN = window.__WBX_GEN__;
   function isCurrentGen() { return GEN === window.__WBX_GEN__; }
 
+  // ⚠️ 立即吊销旧实例的定时器（11/12）：只靠"下次 tick 时发现代际不对再自毁"有致命的时间窗——
+  // 旧实例的轮播定时器在自毁前还会再触发一次 applyTheme，实测表现为「设了 1 分钟，
+  // 结果第 10 秒就被旧实例切走一次，然后新实例到 60 秒才切」（新旧实例交错切换）。
+  // 这里维护一张全局定时器登记表，新实例注入时把旧的一并 clear，不留时间窗。
+  (function revokeOldTimers() {
+    var reg = window.__WBX_TIMERS__;
+    if (reg && reg.length) {
+      for (var i = 0; i < reg.length; i++) {
+        try { clearInterval(reg[i]); } catch (e) {}
+        try { clearTimeout(reg[i]); } catch (e) {}
+      }
+    }
+    window.__WBX_TIMERS__ = [];
+  })();
+  // 本实例的所有常驻定时器都经此登记，供下一个实例吊销
+  function wbxInterval(fn, ms) {
+    var id = setInterval(fn, ms);
+    (window.__WBX_TIMERS__ = window.__WBX_TIMERS__ || []).push(id);
+    return id;
+  }
+
   // 嵌入模式：注入到 WorkBuddy 的远程网页 iframe（资料库 / 专家 / 技能 / 连接器 /
   // 自动化 / 更多等页面都是 workbuddy.cn 的独立 iframe，主文档 CSS 无法穿透）。
   // 嵌入模式下只铺壁纸 + 磨砂玻璃 + 去白引擎，不建主题切换器、不做粒子动效（省性能）。
@@ -682,7 +703,20 @@
 
   var state = { style: null, ambient: null, fx: null, bar: null, mo: null, queueLift: -1 };
 
-  function clearFx() { if (state.fx) { state.fx.remove(); state.fx = null; } }
+  // ⚠️ 必须按 DOM 全量清扫，不能只 remove state.fx（11/12 修复"多个粒子叠在一起"）：
+  // 主题每次注入都是一个全新 IIFE，state 是各自闭包里的局部变量。旧实例被新实例取代时，
+  // 它创建的 #wbx-fx 节点仍在 body 上，而**新实例的 state.fx 指向的是自己刚建的那个**，
+  // 于是 clearFx 只删掉自己前一次的，旧实例遗留的全部活下来 → 切换 N 次就叠 N 层粒子
+  // （实测一次会话累积到 6 个：4 组花瓣 + 1 组雪 + 1 组雨同时飘）。
+  // 同时按 class 兜底清扫散落的粒子元素（防旧版结构化残留）。
+  function clearFx() {
+    var nodes = document.querySelectorAll('#wbx-fx, #wbx-bg, .wbx-bg-layer');
+    for (var i = 0; i < nodes.length; i++) { try { nodes[i].remove(); } catch (e) {} }
+    // 兜底：脱离 #wbx-fx 容器的散落粒子（旧版本或异常中断留下的）
+    var stray = document.querySelectorAll('body > .wbx-petal, body > .wbx-orb, body > .wbx-orb2');
+    for (var j = 0; j < stray.length; j++) { try { stray[j].remove(); } catch (e) {} }
+    state.fx = null;
+  }
 
   function buildFx(mode) {
     clearFx();
@@ -773,9 +807,18 @@
   };
 
 
+  // ⚠️ 图层去重（11/12）：getElementById 永远只返回第一个，而跨代际注入可能留下多个同 id 节点。
+  // 保留最后一个（最新），其余删掉——新实例应该是最后创建的那个。
+  function dedupeLayer(id) {
+    var all = document.querySelectorAll('[id="' + id + '"]');
+    if (all.length <= 1) return all[0] || null;
+    for (var i = 0; i < all.length - 1; i++) { try { all[i].remove(); } catch (e) {} }
+    return all[all.length - 1];
+  }
+
   function buildMotif(key) {
     if (EMBED) return;            // 嵌入模式（远程网页 iframe）：不做侧栏立绘/粒子动效
-    var host = document.getElementById('wbx-motifs');
+    var host = dedupeLayer('wbx-motifs');
     var sb = document.querySelector('.conversation-sidebar');
     if (!host) { host = document.createElement('div'); host.id = 'wbx-motifs'; }
     // 优先挂到侧栏内部（相对侧栏定位、压在文字下层）；侧栏未就绪时暂挂 body，下次切主题再纠正
@@ -1498,7 +1541,7 @@
         out.width = w; out.height = h;
         out.getContext('2d').drawImage(bl, p, p, w, h, 0, 0, w, h);
         var url = out.toDataURL('image/jpeg', 0.86);
-        var g = document.getElementById('wbx-glass');
+        var g = dedupeLayer('wbx-glass');
         if (!g) {
           g = document.createElement('div');
           g.id = 'wbx-glass';
@@ -1561,13 +1604,13 @@
     b.style.setProperty('--wbx-side', t.side);
     b.style.setProperty('--wbx-veil-l', t.veilL);
     b.style.setProperty('--wbx-veil-m', t.veilM);
-    var amb = document.getElementById('wbx-ambient');
+    var amb = dedupeLayer('wbx-ambient');
     if (!amb) {
       amb = document.createElement('div');
       amb.id = 'wbx-ambient';
       document.body.appendChild(amb);
-      state.ambient = amb;
     }
+    state.ambient = amb;   // 跨代际复用同一节点时也要更新引用（原来只在新建时赋值）
     amb.style.backgroundImage = 'url("' + (t.wp || t.art) + '")';
     amb.style.boxShadow = 'inset 0 0 150px rgba(0,0,0,.12)';
     buildBlurWall(t.wp || t.art);
@@ -1581,10 +1624,22 @@
 
   function start() {
     var root = document.getElementById('root') || document.body;
+    // ⚠️ 注入入口统一清扫（11/12）：文件顶部的清理段只在**脚本解析时**跑一次，而
+    // start() 可能因重注/自愈被再次调用（同一页面里存在多个 IIFE 实例时尤其明显）。
+    // 旧实例遗留的图层节点不在新实例的 state 里，只能按 DOM 全量扫。幂等，成本可忽略。
+    clearFx();
+    ['wbx-switcher', 'wbx-glass', 'wbx-motifs'].forEach(function (id) {
+      var all = document.querySelectorAll('[id="' + id + '"]');
+      for (var i = 0; i < all.length - 1; i++) { try { all[i].remove(); } catch (e) {} }
+    });
     state.style = document.createElement('style');
     state.style.setAttribute('data-wbx', 'theme');
     state.style.textContent = css;
     document.head.appendChild(state.style);
+    // 重复 style 去重：只保留刚插入的这一份（同一页面多个实例时避免规则成倍叠加）
+    Array.prototype.slice.call(document.querySelectorAll('style[data-wbx="theme"]')).forEach(function (s) {
+      if (s !== state.style) { try { s.remove(); } catch (e) {} }
+    });
 
     var bar = null;
     if (!EMBED) {
@@ -1655,9 +1710,33 @@
        ─ 用户手动点主题即停（避免与自己的选择打架），点「关闭」即停；
        ─ 时长 0 = 关闭。仅主窗启用，嵌入模式不跑（iframe 频繁切换会拖慢宿主）。 */
     var ROT_KEY = 'wbx-rotate';
+    /* ⚠️ 计时必须用「时间戳判定 + 短周期轮询」，不能用 setInterval(rotMs)（11/12 修复"计时不准"）:
+       ┬ ① 漂移累积：setInterval 每次回调都可能晚几到几十 ms，30 分钟一次跑十几轮就偏出数秒；
+       ┬ ② 后台节流：窗口最小化/切到后台时，浏览器把定时器压到 1 次/分钟甚至更久，
+       │     于是 30 分钟的间隔会被"顺延"成 31、33 分钟——这是用户体感"计时不准"的主因；
+       ┬ ③ 长间隔不可靠：一次性 setTimeout(1800000) 同样会被节流推迟，且系统睡眠唤醒后不补。
+       修法：只存"下次该切的绝对时间戳"，每 10s 轮询一次比对 Date.now()。
+       被节流时最多晚 10s 就补上（而不是晚一整轮），且每次重算基准，不累积误差。
+       系统睡眠导致的大幅超时也只触发一次切换（不补切多次），符合直觉。 */
     var rotTimer = null;
     var rotQueue = [];
     var rotMs = 0;
+    var rotNextAt = 0;          // 下次切换的绝对时间戳（ms）
+
+    function rotTick() {
+      if (rotMs <= 0) return;
+      // ⚠️ 代际守卫（11/12）：重注后旧实例的定时器必须自毁，否则两个实例各跑一套轮播，
+      // 表现为「一次设了 1 分钟，结果两个主题轮流跳」——实测 GEN 到 14 时新旧实例同时在切。
+      // glassTimer/frostTimer/mo 早有这道守卫，rotTimer 当时漏了。
+      if (!isCurrentGen()) { clearInterval(rotTimer); rotTimer = null; return; }
+      var now = Date.now();
+      if (now < rotNextAt) return;
+      // 对齐到"下一个整点间隔"，避免节流恢复后连续补切：
+      // 正常情况 rotNextAt += rotMs 就是准的；落后超过一整轮（睡眠/长时间节流）则从此刻重新起算
+      var late = now - rotNextAt;
+      rotNextAt = late > rotMs ? (now + rotMs) : (rotNextAt + rotMs);
+      applyTheme(nextRotating());
+    }
 
     function nextRotating() {
       var keys = Object.keys(WBX.themes);
@@ -1711,14 +1790,27 @@
       setRotate(v);
     }
 
+    function clearWbxTimer(id) {
+      if (!id) return;
+      try { clearInterval(id); } catch (e) {}
+      var reg = window.__WBX_TIMERS__;
+      if (reg) {
+        var k = reg.indexOf(id);
+        if (k >= 0) reg.splice(k, 1);
+      }
+    }
+
     function setRotate(minutes) {
-      if (rotTimer) { clearInterval(rotTimer); rotTimer = null; }
+      if (rotTimer) { clearWbxTimer(rotTimer); rotTimer = null; }
       rotMs = minutes > 0 ? minutes * 60000 : 0;
       rotQueue = [];
+      rotNextAt = rotMs > 0 ? (Date.now() + rotMs) : 0;   // 从现在起算第一个间隔
       paintRotateBtns();
       try { localStorage.setItem(ROT_KEY, String(minutes)); } catch (e) {}
       if (rotMs > 0) {
-        rotTimer = setInterval(function () { applyTheme(nextRotating()); }, rotMs);
+        // 3s 轮询：精度足够（最坏晚 3s，30/45/60 分钟尺度上无感），
+        // 计算量 = 每 3 秒读一次 Date.now() 做比较，几乎零开销；后台被节流也不影响正确性
+        rotTimer = wbxInterval(rotTick, 3000);
       }
     }
     function stopRotate() { setRotate(0); }
@@ -1762,7 +1854,7 @@
     // window.resize 覆盖，每秒再 getBoundingClientRect + getComputedStyle 属纯冗余。
     // 心跳只负责"轻活"（状态检查/避让/宿主自愈），几何对位走 glassDirty 标记按需触发。
 
-    state.glassTimer = setInterval(function () {
+    state.glassTimer = wbxInterval(function () {
       if (!isCurrentGen()) { clearInterval(state.glassTimer); return; }   // 旧实例自毁，避免与新实例抢写
       // 几何只在被标记为脏时才重新测量；否则仅做零成本的状态维护
       if (glassDirty) { glassDirty = false; syncGlass(); }
@@ -1796,7 +1888,7 @@
     scheduleFrost();
     tameGrowthBuddy();   // 注入即生效（不等 1s tick）
     syncQueueLift();     // 注入即生效（不等 1s tick）
-    state.frostTimer = setInterval(function () {
+    state.frostTimer = wbxInterval(function () {
       if (!isCurrentGen()) { clearInterval(state.frostTimer); return; }
       // ⚠️ 空闲调度（11/12）：3s 兜底本身不急，让它在空闲时段跑。
       // 预筛后单轮 6ms（原 76ms），但仍不该和流式输出抢帧。
@@ -1822,8 +1914,8 @@
     stopRotate();
     clearFx();
     if (state.ambient) { state.ambient.remove(); state.ambient = null; }
-    var gl = document.getElementById('wbx-glass');
-    if (gl) gl.remove();
+    // 全量清玻璃层（getElementById 只删第一个，跨代际残留会留在 DOM 上）
+    document.querySelectorAll('#wbx-glass').forEach(function (e) { try { e.remove(); } catch (err) {} });
     lastGlassGeo = null;   // 玻璃层几何缓存失效（还原后重新启用时要从头写几何）
     if (state.glassRo) { state.glassRo.disconnect(); state.glassRo = null; }
     if (state.glassTimer) { clearInterval(state.glassTimer); state.glassTimer = null; }

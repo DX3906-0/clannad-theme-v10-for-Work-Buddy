@@ -17,7 +17,32 @@ applyTheme(key)
                  setInterval 5s  ⇒ frostWhites / clearMaskOverreach
 ```
 
-轮播是独立的一条线，不参与渲染引擎：`setRotate(minutes)` 起一个 `setInterval` 到点调 `applyTheme(nextRotating())`。顺序由 Fisher-Yates 洗牌生成队列，队首恰为当前主题则与队尾交换（保证不连续重复）。**手动点主题、点 ↺ 都会 `stopRotate()`** —— 用户刚选好就被换走是很烦的事。分钟数存 `wbx-rotate`，自定义值同样持久化。
+轮播是独立的一条线，不参与渲染引擎：`setRotate(minutes)` 起一个轮询定时器，到点调 `applyTheme(nextRotating())`。顺序由 Fisher-Yates 洗牌生成队列，队首恰为当前主题则与队尾交换（保证不连续重复）。**手动点主题、点 ↺ 都会 `stopRotate()`** —— 用户刚选好就被换走是很烦的事。分钟数存 `wbx-rotate`，自定义值同样持久化。
+
+### 计时不能用 setInterval(间隔)
+
+一开始写的是 `setInterval(fn, 30 * 60000)`，用户反馈"计时不准"。三个原因叠在一起：
+
+1. **漂移累积** —— 每次回调都可能晚几到几十毫秒，跑十几轮就偏出数秒
+2. **后台节流** —— 窗口最小化或切到后台时，浏览器把定时器压到 1 次/分钟甚至更久，30 分钟的间隔会被"顺延"成 31、33 分钟（这是体感不准的主因）
+3. **长间隔不可靠** —— 一次性 `setTimeout(1800000)` 同样被节流，系统睡眠唤醒后也不补
+
+现在只存**下次该切的绝对时间戳** `rotNextAt`，用 3 秒轮询比对 `Date.now()`：
+
+```js
+var late = now - rotNextAt;
+rotNextAt = late > rotMs ? (now + rotMs) : (rotNextAt + rotMs);   // 落后超一轮则重算，否则对齐
+```
+
+每轮都以绝对时间为准重算，误差不累积；被节流时最多晚 3 秒补上（而不是晚一整轮）；睡眠导致大幅超时只触发一次切换，不补切多次。全新页面实测 1 分钟间隔触发于 **+60.0s 和 +120.0s，误差 0.0 秒**。
+
+### 多实例定时器必须立即吊销
+
+代际守卫（`isCurrentGen()`）只能让旧定时器在**下一次触发时**自毁——这中间有个致命时间窗：旧实例的轮播定时器在自毁前还会再调一次 `applyTheme`，表现为"设了 1 分钟，结果第 10 秒被旧实例切走一次，然后新实例到 60 秒才切"，两个实例交错切。
+
+修法是**全局定时器登记表**：所有常驻定时器经 `wbxInterval()` 创建并登记到 `window.__WBX_TIMERS__`，新实例注入时在 IIFE 开头就把旧的整批 `clearInterval`，不留时间窗。`restore()` 里清定时器也要同步从表里摘除，否则表会残留已失效的 id。
+
+> 加任何常驻定时器都必须走 `wbxInterval()`，直接 `setInterval` 会漏登记，下次注入清不掉。
 
 三个引擎各管一摊：
 
@@ -130,6 +155,30 @@ img.convert('RGBA').split()[-1].getextrema()   # (amin, amax)
 - 已经是 JPEG 的高质量图重新编码收益接近 0（甚至变大），不要碰
 
 这一轮把 6.77MB 压到 4.35MB（-35.8%）。
+
+### 图层不能只按"自己记录的引用"删
+
+`state` 是每个 IIFE 里的局部变量，**跨代际完全隔离**。旧实例创建的 `#wbx-fx` 节点仍挂在 `body` 上，而新实例的 `state.fx` 指向的是它自己刚建的那个——按引用删永远删不到旧实例留下的。
+
+后果：切换 N 次就叠 N 层粒子。实测某次会话累积到 **6 个 `#wbx-fx`**（4 组花瓣 + 1 组雪 + 1 组雨同时飘），用户看到的就是"好几个粒子效果叠在同一张壁纸上"。
+
+正确做法是**按 DOM 全量清扫**：
+
+```js
+function clearFx() {
+  document.querySelectorAll('#wbx-fx, #wbx-bg, .wbx-bg-layer').forEach(n => n.remove());
+  document.querySelectorAll('body > .wbx-petal, body > .wbx-orb, body > .wbx-orb2').forEach(n => n.remove());
+  state.fx = null;
+}
+```
+
+同类问题也存在于 `getElementById`：它**永远只返回第一个**，跨代际留下多个同 id 节点时会拿到旧的。所以：
+
+- `start()` 开头统一清扫 `wbx-switcher / wbx-glass / wbx-motifs` 的多余副本，并对 `style[data-wbx="theme"]` 去重
+- 各图层用 `dedupeLayer(id)` 取"最后一个（最新）"，其余删掉
+- `restore()` 里清玻璃层也要 `querySelectorAll` 全量删
+
+> 判断依据：**只要状态存在闭包里，就不能假设 DOM 里只有自己那一份**。注入式脚本天然会出现多代际共存，所有"我的节点"都要按选择器找，不能只信内存引用。
 
 ### iframe
 
