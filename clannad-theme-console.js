@@ -637,11 +637,22 @@
     + '#wbx-switcher .wbx-theme.is-active .name { color: var(--wbx-accent,#d96a92); }'
     + '#wbx-switcher .wbx-restore { width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(120,120,120,.3); background: rgba(245,245,247,.85); color: #6b6b73; cursor: pointer; font-size: 15px; display: grid; place-items: center; margin-left: auto; transition: background .18s; }'
     + '#wbx-switcher .wbx-restore:hover { background: #ececef; }'
-    + '#wbx-switcher .wbx-rotate { display: flex; gap: 6px; padding-top: 2px; border-top: 1px solid rgba(255,255,255,.55); }'
-    + '#wbx-switcher .wbx-rot-btn { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 0; border-radius: 999px; background: rgba(255,255,255,.62); color: var(--wbx-text,#5c3550); font-size: 13px; cursor: pointer; transition: background .18s, color .18s, box-shadow .18s; }'
-    + '#wbx-switcher .wbx-rot-btn .name { font-weight: 600; letter-spacing: .03em; }'
+    + '#wbx-switcher .wbx-rotate { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.55); }'
+    + '#wbx-switcher .wbx-rot-btn { display: flex; align-items: center; gap: 4px; padding: 5px 8px; border: 0; border-radius: 999px; background: rgba(255,255,255,.62); color: var(--wbx-text,#5c3550); font-size: 12px; cursor: pointer; transition: background .18s, color .18s, box-shadow .18s; }'
+    + '#wbx-switcher .wbx-rot-btn .name { font-weight: 600; letter-spacing: .02em; }'
     + '#wbx-switcher .wbx-rot-btn:hover { background: rgba(255,255,255,.92); }'
     + '#wbx-switcher .wbx-rot-btn.is-active { background: var(--wbx-accent,#d96a92); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--wbx-accent,#d96a92) 40%, transparent); }'
+    // 自定义时长输入组：-[分钟数]+ 与一个「设定」按钮，走同一条 setRotate 通路
+    + '#wbx-switcher .wbx-rot-custom { display: flex; align-items: center; gap: 1px; margin-left: auto; padding: 2px 3px; border-radius: 999px; background: rgba(255,255,255,.62); }'
+    + '#wbx-switcher .wbx-rot-step { width: 22px; height: 22px; border: 0; border-radius: 50%; background: transparent; color: var(--wbx-text,#5c3550); cursor: pointer; font-size: 14px; line-height: 1; display: grid; place-items: center; transition: background .15s; }'
+    + '#wbx-switcher .wbx-rot-step:hover { background: rgba(0,0,0,.07); }'
+    + '#wbx-switcher .wbx-rot-input { width: 34px; border: 0; background: transparent; text-align: center; font: 600 13px/1 ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--wbx-text,#5c3550); padding: 0; -moz-appearance: textfield; appearance: textfield; }'
+    + '#wbx-switcher .wbx-rot-input::-webkit-outer-spin-button, #wbx-switcher .wbx-rot-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }'
+    + '#wbx-switcher .wbx-rot-input:focus { outline: none; }'
+    + '#wbx-switcher .wbx-rot-unit { font-size: 11px; color: var(--wbx-text,#5c3550); opacity: .65; }'
+    + '#wbx-switcher .wbx-rot-go { padding: 4px 9px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--wbx-accent,#d96a92) 18%, rgba(255,255,255,.8)); color: var(--wbx-text,#5c3550); font: 600 12px/1 ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background .18s, color .18s; }'
+    + '#wbx-switcher .wbx-rot-go:hover { background: var(--wbx-accent,#d96a92); color: #fff; }'
+    + '#wbx-switcher .wbx-rot-go.is-active { background: var(--wbx-accent,#d96a92); color: #fff; box-shadow: 0 2px 8px color-mix(in srgb, var(--wbx-accent,#d96a92) 40%, transparent); }'
     + '#wbx-switcher .wbx-launcher { width: 46px; height: 46px; border-radius: 50%; border: 0; cursor: pointer; font-size: 20px; display: grid; place-items: center; color: #fff; background: radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--wbx-accent,#d96a92) 70%, #fff) 0%, var(--wbx-accent,#d96a92) 72%); box-shadow: 0 4px 14px rgba(0,0,0,.18); animation: wbx-glow 3.6s ease-in-out infinite; transition: transform .18s ease; }'
     + '#wbx-switcher .wbx-launcher:hover { transform: scale(1.07); }'
     // 各主题角色个人图：嵌入左侧侧边栏、压在文字下层(z-index:0)、mini 尺寸、清晰不模糊、柔边融入，pointer-events:none 不挡字
@@ -1587,9 +1598,18 @@
       });
         html += '<button type="button" class="wbx-restore" title="还原默认主题">↺</button>';
         html += '<div class="wbx-rotate" role="group" aria-label="乱序轮播">'
-             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="30" title="每 30 分钟随机切换">🎲<span class="name">30分钟</span></button>'
-             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="45" title="每 45 分钟随机切换">🎲<span class="name">45分钟</span></button>'
-             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="0" title="关闭轮播">⏸<span class="name">关闭</span></button>'
+             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="30" title="每 30 分钟随机切换">🎲<span class="name">30分</span></button>'
+             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="45" title="每 45 分钟随机切换">🎲<span class="name">45分</span></button>'
+             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="60" title="每 60 分钟随机切换">🎲<span class="name">60分</span></button>'
+             +  '<button type="button" class="wbx-rot-btn" data-wbx-rot="0" title="关闭轮播">⏸<span class="name">关</span></button>'
+             // 自定义时长：减 / 输入框 / 加 / 设定。回车或点「设定」即刻生效
+             +  '<span class="wbx-rot-custom">'
+             +    '<button type="button" class="wbx-rot-step" data-wbx-step="-5" title="减少 5 分钟">−</button>'
+             +    '<input type="number" class="wbx-rot-input" min="1" max="1440" step="1" value="" placeholder="—" title="自定义间隔（分钟），1~1440" aria-label="自定义轮播间隔（分钟）">'
+             +    '<span class="wbx-rot-unit">分</span>'
+             +    '<button type="button" class="wbx-rot-step" data-wbx-step="5" title="增加 5 分钟">+</button>'
+             +    '<button type="button" class="wbx-rot-go" title="按此间隔开始轮播">设定</button>'
+             +  '</span>'
              +  '</div>';
         html += '</div>';
       bar.innerHTML = html;
@@ -1600,8 +1620,33 @@
         if (btn.classList.contains('wbx-launcher')) { bar.classList.toggle('wbx-collapsed'); return; }
         if (btn.classList.contains('wbx-theme')) { stopRotate(); applyTheme(btn.getAttribute('data-wbx')); return; }
         if (btn.classList.contains('wbx-restore')) { restore(); return; }
-        if (btn.classList.contains('wbx-rot-btn')) { setRotate(parseInt(btn.getAttribute('data-wbx-rot'), 10)); }
+        if (btn.classList.contains('wbx-rot-btn')) { setRotate(parseInt(btn.getAttribute('data-wbx-rot'), 10)); return; }
+        // 自定义时长的 −/+ 步进（以 5 分钟为单位，夹紧 1~1440）
+        if (btn.classList.contains('wbx-rot-step')) {
+          var inp = bar.querySelector('.wbx-rot-input');
+          if (!inp) return;
+          var step = parseInt(btn.getAttribute('data-wbx-step'), 10) || 0;
+          var cur = parseInt(inp.value, 10);
+          if (isNaN(cur)) cur = 30;                       // 空值起步按 30
+          var next = cur + step;
+          if (next < 1) next = 1;
+          if (next > 1440) next = 1440;
+          inp.value = String(next);
+          return;
+        }
+        // 「设定」：按输入框的分钟数立刻开始轮播
+        if (btn.classList.contains('wbx-rot-go')) { commitCustomRotate(); return; }
       });
+      // 输入框回车 = 设定；Esc 清空并收起焦点
+      var rotInput = bar.querySelector('.wbx-rot-input');
+      if (rotInput) {
+        rotInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); commitCustomRotate(); }
+          else if (e.key === 'Escape') { e.preventDefault(); rotInput.blur(); }
+        });
+        // 输入时不要冒泡到切换器（避免触发按钮逻辑）
+        rotInput.addEventListener('click', function (e) { e.stopPropagation(); });
+      }
     }
     state.bar = bar;
 
@@ -1634,10 +1679,36 @@
 
     function paintRotateBtns() {
       if (!bar) return;
+      var mins = rotMs > 0 ? Math.round(rotMs / 60000) : 0;
+      var matchedPreset = false;
       Array.prototype.forEach.call(bar.querySelectorAll('.wbx-rot-btn'), function (b) {
-        var on = rotMs > 0 && parseInt(b.getAttribute('data-wbx-rot'), 10) * 60000 === rotMs;
+        var on = mins > 0 && parseInt(b.getAttribute('data-wbx-rot'), 10) === mins;
+        if (on) matchedPreset = true;
         b.classList.toggle('is-active', on);
       });
+      // 自定义输入区：轮播开着但不在任何快捷档上 → 高亮「设定」并把数值回填到输入框
+      var inp = bar.querySelector('.wbx-rot-input');
+      var go = bar.querySelector('.wbx-rot-go');
+      var isCustom = mins > 0 && !matchedPreset;
+      if (go) go.classList.toggle('is-active', isCustom);
+      if (inp) {
+        if (mins > 0) inp.value = String(mins);
+        else if (!isCustom) inp.value = '';
+      }
+      // 关闭态（mins=0）时输入框留空，占位符显示「—」
+    }
+
+    // 把输入框里的分钟数落成实际轮播（夹紧 1~1440）。空值或非法值不动作。
+    function commitCustomRotate() {
+      if (!bar) return;
+      var inp = bar.querySelector('.wbx-rot-input');
+      if (!inp) return;
+      var v = parseInt(inp.value, 10);
+      if (isNaN(v)) { inp.focus(); return; }
+      if (v < 1) v = 1;
+      if (v > 1440) v = 1440;
+      inp.value = String(v);
+      setRotate(v);
     }
 
     function setRotate(minutes) {
