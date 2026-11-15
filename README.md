@@ -6,7 +6,44 @@
 
 6 个角色主题，每个都有自己的壁纸、磨砂玻璃、角色立绘和粒子动效。切换器在右上角，随时换，也能一键还原回原生界面。
 
-> **在线预览**：[`docs/gallery.html`](docs/gallery.html) —— 左右切换，可看每个主题的真实效果（壁纸、磨砂玻璃、立绘、粒子）。
+<table>
+<tr>
+<td width="33%" align="center">
+<img src="docs/themes/nagisa.jpg" alt="古河渚"><br>
+<b>古河渚</b><br>
+<sub>花瓣飘落</sub>
+</td>
+<td width="33%" align="center">
+<img src="docs/themes/kyou.jpg" alt="藤林杏"><br>
+<b>藤林杏</b><br>
+<sub>雨滴</sub>
+</td>
+<td width="33%" align="center">
+<img src="docs/themes/ryou.jpg" alt="藤林椋"><br>
+<b>藤林椋</b><br>
+<sub>光点浮动</sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<img src="docs/themes/tomoyo.jpg" alt="坂上智代"><br>
+<b>坂上智代</b><br>
+<sub>雪花</sub>
+</td>
+<td align="center">
+<img src="docs/themes/sakura.jpg" alt="伊吹风子"><br>
+<b>伊吹风子</b><br>
+<sub>光玉</sub>
+</td>
+<td align="center">
+<img src="docs/themes/fuko.jpg" alt="樱花坡道"><br>
+<b>樱花坡道</b><br>
+<sub>花瓣飘落</sub>
+</td>
+</tr>
+</table>
+
+<sub>以上按真实界面比例合成：左侧栏立绘（`object-fit: cover` 撑满，顶部对齐）、中间阅读列磨砂玻璃、整窗壁纸、粒子层叠加。</sub>
 
 ---
 
@@ -90,6 +127,8 @@ runtime/
   └── restart-inject-guard.vbs  改了守护代码后用它重启
 assets/                      从主脚本里提取出的原始素材，仅供取用
 docs/ARCHITECTURE.md         实现机制 + 踩坑记录
+docs/themes/                 README 顶部的主题预览图（JPEG，6 张共 265KB）
+docs/make-theme-cards.py     重新生成预览图的脚本
 ```
 
 `runtime/` 里是副本，实际生效的位置在 `~/.workbuddy/`。改完记得同步过去（两边我都保持一致的）。
