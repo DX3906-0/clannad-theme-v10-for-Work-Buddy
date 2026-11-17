@@ -18,14 +18,18 @@ SB_W   = int(CW * 0.1857)  # 侧栏宽（立绘宿主）
 GL_L   = int(CW * 0.2175)  # 玻璃层左缘
 GL_R   = int(CW * 0.9707)  # 玻璃层右缘
 
+# 关键：key 必须与 clannad-theme-console.js 主题表的 key 一致
+#   sakura = 樱花坡道（壁纸 sakura-petals.jpg，立绘 sakura-petals.png）
+#   fuko   = 伊吹风子（壁纸 fuko-wp.jpg   = 主题表 wp 字段独有的新图，
+#            立绘 fuko.png；旧图 assets/wallpapers/fuko.jpg 已废弃）
 THEMES = [
     # key, 壁纸文件, 立绘文件, 角色名, 粒子, 主色
     ('nagisa', 'nagisa.jpg',        'nagisa.png',        '古河渚',   'petal', '#e8849c'),
     ('kyou',   'kyou.jpg',          'kyou.png',          '藤林杏',   'rain',  '#6fa8d0'),
     ('ryou',   'ryou.jpg',          'ryou.png',          '藤林椋',   'orb',   '#d9c96b'),
     ('tomoyo', 'tomoyo.jpg',        'tomoyo.png',        '坂上智代', 'snow',  '#7fb8d4'),
-    ('sakura', 'sakura-petals.jpg', 'sakura-petals.png', '伊吹风子', 'light', '#e89ba8'),
-    ('fuko',   'fuko.jpg',          'fuko.png',          '樱花坡道', 'petal', '#f0a8c0'),
+    ('fuko',   'fuko-wp.jpg',       'fuko.png',          '伊吹风子', 'light', '#e89ba8'),
+    ('sakura', 'sakura-petals.jpg', 'sakura-petals.png', '樱花坡道', 'petal', '#f0a8c0'),
 ]
 
 

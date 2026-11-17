@@ -31,12 +31,12 @@
 <sub>雪花</sub>
 </td>
 <td align="center">
-<img src="docs/themes/sakura.jpg" alt="伊吹风子"><br>
+<img src="docs/themes/fuko.jpg" alt="伊吹风子"><br>
 <b>伊吹风子</b><br>
 <sub>光玉</sub>
 </td>
 <td align="center">
-<img src="docs/themes/fuko.jpg" alt="樱花坡道"><br>
+<img src="docs/themes/sakura.jpg" alt="樱花坡道"><br>
 <b>樱花坡道</b><br>
 <sub>花瓣飘落</sub>
 </td>

@@ -144,6 +144,27 @@ rotNextAt = late > rotMs ? (now + rotMs) : (rotNextAt + rotMs);   // 落后超�
 
 壁纸和立绘以 base64 内嵌在 JS 里，所以体积**全在图片**（6.28MB / 6.43MB，代码只占 0.16MB）。
 
+**素材来源与字段优先级（容易搞错，务必按这张表取图）**
+
+| 主题 key | 角色 | 壁纸来源 | 立绘来源 |
+|---|---|---|---|
+| `nagisa` | 古河渚 | `WBX.assets.nagisa` (jpeg) | `portraits/nagisa.png` |
+| `kyou` | 藤林杏 | `WBX.assets.kyou` | `portraits/kyou.png` |
+| `ryou` | 藤林椋 | `WBX.assets.ryou` | `portraits/ryou.png` |
+| `tomoyo` | 坂上智代 | `WBX.assets.tomoyo` | `portraits/tomoyo.png` |
+| `fuko` | **伊吹风子** | **`t.wp`（独有 jpeg，`assets/wallpapers/fuko-wp.jpg`）** | `portraits/fuko.png` |
+| `sakura` | **樱花坡道** | `WBX.assets.sakura`（`sakura-petals.jpg`） | `portraits/sakura-petals.png` |
+
+三个反直觉的点：
+
+1. **`WBX.assets` 里 6 个键全是 `data:image/jpeg`，是壁纸不是立绘**（名字像角色名，很容易误判）。
+   立绘在 `assets/portraits/*.png`，由 `buildMotif(key)` 单独加载，不走 `WBX.assets`。
+2. **`fuko`（伊吹风子）的壁纸在 `t.wp` 字段，不在 `WBX.assets.fuko`**。渲染用的是
+   `url(t.wp || t.art)` —— **`wp` 优先**。全表只有它一个带 `wp`。
+   `assets/wallpapers/fuko.jpg`（477KB）是**旧版图**，已改名为 `fuko-legacy.jpg`，勿再使用。
+3. **`sakura` 是「樱花坡道」不是「伊吹风子」**。key 名和中文名不是直译关系，
+   以主题表的 `label` 为准，别按 key 猜。
+
 压缩前必须**逐个检查 alpha 通道实际使用率**，不能按格式一刀切：
 
 ```python
