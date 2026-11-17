@@ -379,6 +379,14 @@
     + '  background: linear-gradient(90deg, var(--wbx-veil-l) 0%, var(--wbx-veil-m) 42%, rgba(255,255,255,0) 75%); }'
     + 'body.wbx-active .main-content--welcome > * { position: relative; z-index: 99999; }'
     // 侧边栏：整页壁纸透出 + Clannad「光玉」签名（不再是光秃秃的平板，与对话区背景观感统一）
+    // 新版 WorkBuddy(2026-11) 把侧栏实心白底 rgb(242,242,242) 挪到了外层容器
+    // .layout-window-frame__nav.is-inline 上（旧的 .conversation-list 已改版）。frostable 引擎
+    // 因「侧栏祖先跳过」逻辑(1233 行)故意不碰它，且白底是应用原生 CSS（非 inline，removeProperty
+    // 清不到）→ 结构性大白块必须 CSS 硬规则兜底。:has() 结构选择器兜住未来类名改名。
+    + 'body.wbx-active .layout-window-frame__nav,'
+    + 'body.wbx-active [class*="layout-window-frame__nav"],'
+    + 'body.wbx-active div:has(> .conversation-sidebar) {'
+    + '  background: transparent !important; }'
     + 'body.wbx-active .conversation-sidebar {'
     + '  position: relative; isolation: isolate;'
     + '  background: linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.01) 34%, rgba(255,255,255,.05) 100%) !important;'
